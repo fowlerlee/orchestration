@@ -1,4 +1,4 @@
-package client
+package main
 
 import (
 	Q "github.com/golang-collections/collections/queue"
@@ -6,7 +6,7 @@ import (
 )
 
 type Client struct {
-	id         uuid.UUID
-	sendStream chan<- string
-	queue      Q.Queue
+	ID         uuid.UUID
+	Queue      Q.Queue
+	Channel chan string
 }

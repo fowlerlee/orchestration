@@ -1,7 +1,8 @@
-package manager
+package main
 
 import (
 	"encoding/json"
+	"fmt"
 	http "net/http"
 
 	Q "github.com/golang-collections/collections/queue"
@@ -9,8 +10,9 @@ import (
 )
 
 type Manager struct {
-	id    u.UUID
-	queue Q.Queue
+	ID      u.UUID
+	Queue   Q.Queue
+	Channel chan string
 }
 
 func submitHandler(w http.ResponseWriter, r *http.Request) {
@@ -48,4 +50,17 @@ func processData(data string) string {
 	// Perform actions on the data
 	// ...
 	return "Data processed successfully!"
+}
+
+func (m *Manager) SendMessagesToWorkers(s []string) string {
+	for _, i := range s {
+		if i == " " || i == "." {
+			fmt.Println("The Message from the Manager is empty: ")
+		}
+		if m.Channel != nil { // ensure it doesnt panic
+			fmt.Printf("sending on channel: %s", i)
+			m.Channel <- i
+		}
+	}
+	return "Messages sent to workers"
 }
