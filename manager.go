@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	http "net/http"
+	"sync"
 
 	Q "github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
@@ -18,23 +20,40 @@ const (
 )
 
 type Manager struct {
-	ID            uuid.UUID
-	Queue         Q.Queue
-	Channel       chan string
-	Worker        []string
-	WorkerTaskMap map[string][]uuid.UUID
-	State         MState
+	sync.Mutex
+	address         string
+	doneChannel     chan bool
+	ID              uuid.UUID
+	Queue           Q.Queue
+	registerChannel chan string
+	Workers         []string
+	WorkerTaskMap   map[string][]uuid.UUID
+	State           MState
+	l               net.Listener
 }
 
-func MakeManager() *Manager {
+func MakeManager(address string) *Manager {
 	return &Manager{
-		ID:            uuid.New(),
-		Queue:         Q.Queue{},
-		Channel:       make(chan string),
-		Worker:        make([]string, 5),
-		WorkerTaskMap: make(map[string][]uuid.UUID),
-		State:         Ready,
+		address:         address,
+		ID:              uuid.New(),
+		Queue:           Q.Queue{},
+		registerChannel: make(chan string),
+		Workers:         make([]string, 5),
+		WorkerTaskMap:   make(map[string][]uuid.UUID),
+		State:           Ready,
 	}
+}
+
+func (m *Manager) Register(args *RegisterArgs, reply *int) error {
+	*reply = 200
+	return nil
+}
+
+func (m *Manager) GiveManagerWork(args *DoTaskArgs, reply *ResultArgs) error {
+	m.Queue.Enqueue(args)
+	*&reply.JobName = args.JobName
+	*&reply.statusCode = 200
+	return nil
 }
 
 func submitHandler(w http.ResponseWriter, r *http.Request) {
@@ -79,9 +98,9 @@ func (m *Manager) SendMessagesToWorkers(s []string) string {
 		if i == " " || i == "." {
 			fmt.Println("The Message from the Manager is empty: ")
 		}
-		if m.Channel != nil { // ensure it doesnt panic
+		if m.registerChannel != nil { // ensure it doesnt panic
 			fmt.Printf("sending on channel: %s", i)
-			m.Channel <- i
+			m.registerChannel <- i
 		}
 	}
 	return "Messages sent to workers"
