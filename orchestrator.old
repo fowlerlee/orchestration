@@ -18,6 +18,7 @@ variables msgs = {}, wState = [w \in Workers |-> "waiting"],
             cState = [c \in Clients |-> "idle"],
             queues = [q \in Actors |-> <<>>];
             
+
 macro send(id, msg) begin
     queues := Append(queues[id], msg);
 end macro;
@@ -36,10 +37,12 @@ begin
     PerformWork:
         skip;
         
+
 end process;
 
 process client \in Clients
 variable msg = <<>>;
+
 begin
     SendTaskToManager:
         if msg = <<>> then
@@ -183,7 +186,6 @@ TypeOK ==
         /\ wState \in [Workers -> {"waiting", "working"}]
         /\ mState \in [Manager -> {"ready", "busy", "jobComplete"}]
         /\ cState \in [Clients -> {"assignTask", "idle"}]
-        /\ msgs \subseteq Messages
         
 
 

@@ -6,13 +6,35 @@ import (
 	http "net/http"
 
 	Q "github.com/golang-collections/collections/queue"
-	u "github.com/google/uuid"
+	"github.com/google/uuid"
+)
+
+type MState int
+
+const (
+	Ready = iota
+	Busy
+	JobComplete
 )
 
 type Manager struct {
-	ID      u.UUID
-	Queue   Q.Queue
-	Channel chan string
+	ID            uuid.UUID
+	Queue         Q.Queue
+	Channel       chan string
+	Worker        []string
+	WorkerTaskMap map[string][]uuid.UUID
+	State         MState
+}
+
+func MakeManager() *Manager {
+	return &Manager{
+		ID:            uuid.New(),
+		Queue:         Q.Queue{},
+		Channel:       make(chan string),
+		Worker:        make([]string, 5),
+		WorkerTaskMap: make(map[string][]uuid.UUID),
+		State:         Ready,
+	}
 }
 
 func submitHandler(w http.ResponseWriter, r *http.Request) {

@@ -17,12 +17,14 @@ func main() {
 		ID:      uuid.New(),
 		Queue:   queue.Queue{},
 		Channel: sharedChan,
+		State: Ready,
 	}
 
 	client := &Client{
 		ID: uuid.New(),
-		Queue: queue.Queue{},
+		Queue: *queue.New(),
 		Channel: sharedChan,
+		State: AssignTask,
 	}
 
 

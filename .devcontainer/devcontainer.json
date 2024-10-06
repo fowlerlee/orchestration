@@ -34,7 +34,7 @@
         "go.gopath": "/go"
       },
       // Add the IDs of extensions you want installed when the container is created.
-      "extensions": ["golang.Go"]
+      "extensions": ["golang.Go", "alygin.vscode-tlaplus", "ms-azuretools.vscode-docker"]
     }
   },
   // Use 'forwardPorts' to make a list of ports inside the container available locally.
