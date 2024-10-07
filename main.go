@@ -5,6 +5,7 @@ import (
 
 	"strconv"
 
+	"github.com/fowlerlee/orchestration/manager"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
 )
@@ -12,13 +13,13 @@ import (
 func main() {
 	fmt.Println("running main")
 
-	sharedChan := make(chan string, 3)
+	sharedChan := make(chan string, 10)
 
-	manager := &Manager{
+	manager := &manager.Manager{
 		ID:              uuid.New(),
 		Queue:           queue.Queue{},
-		registerChannel: sharedChan,
-		State:           Ready,
+		RegisterChannel: sharedChan,
+		State:           manager.MState(manager.Ready),
 	}
 
 	client := &Client{

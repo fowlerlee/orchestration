@@ -2,44 +2,48 @@ package main
 
 import (
 	"context"
-	"fmt"
+
 	"io"
 	"log"
 	"os"
+	"sync"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
-	"github.com/sirupsen/logrus"
+	// "github.com/sirupsen/logrus"
 )
 
 type wState string
 
 const (
-	Waiting wState  = iota
-	Working
+	Waiting wState = "1"
+	Working wState = "2"
 )
 
 // Config holds configuration for the worker node
 type Config struct {
-	Name string
-	ExposedPorts nat.PortSet
-	Cmd [] string
-	Memory int64
-	Disk int64
-	Env []string
+	Name          string
+	ExposedPorts  nat.PortSet
+	Cmd           []string
+	Memory        int64
+	Disk          int64
+	Env           []string
 	RestartPolicy string
+	Image         string
 }
 
 type Worker struct {
+	sync.Mutex
 	ID      uuid.UUID
 	Queue   queue.Queue
 	Channel chan string
-	State wState
+	State   wState
+	Docker  Docker
 }
 
 type Docker struct {
@@ -48,22 +52,30 @@ type Docker struct {
 }
 
 type DockerResult struct {
-	Error string
-	Action string
+	Error       error
+	Action      string
 	ContainerId string
-	Result string
+	Result      string
 }
 
-func (d *Docker) Run() DockerResult  {
+func (d *Docker) Run() DockerResult {
 	ctx := context.Background()
 	reader, err := d.Client.ImagePull(ctx, d.Config.Image, image.PullOptions{})
 	if err != nil {
-		log.Printf("Error pulling image %s: %v \n",  d.Config)
+		log.Printf("Error pulling image %s: %v \n", d.Config)
 		return DockerResult{Error: err}
 	}
 	io.Copy(os.Stdout, reader)
+	return DockerResult{Result: "performed an image pull"}
 }
 
+func (cli *Client) ContainerCreate(
+	ctx context.Context,
+	config *container.Container,
+	hostConfig *container.ExecConfig,
+	networkingConfig *network.NetworkingConfig,
+	// platform *specs.Platform,
+	containerName string)
 
 // func main() {
 // 	// Load configuration (you can replace this with environment variables, flags etc.)
@@ -98,57 +110,47 @@ func (d *Docker) Run() DockerResult  {
 // 	monitorContainer(cli, containerID)
 // }
 
-func pullImage(cli *client.Client, imageName string) error {
-	typePullLatest := image.PullOptions {
-		All true,
+// func runContainer(cli *client.Client, config Config) (string, error) {
+// 	portMapping := fmt.Sprintf("%d:%d", config.Port, config.Port)
+// 	config = &docker.ContainerConfig{
+// 		Image:        config.ContainerImage,
+// 		ExposedPorts: map[string]struct{}{portMapping: {}},
+// 		HostConfig: &docker.HostConfig{
+// 			PortBindings: map[string][]string{portMapping: {fmt.Sprintf("%d", config.Port)}},
+// 		},
+// 	}
 
-	}
+// 	resp, err := cli.ContainerCreate(ctx, config, nil, nil, "")
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	_, err := cli.ImagePull(ctx, imageName, typePullLatest)
-	return err
-}
+// 	err = cli.ContainerStart(ctx, resp.ID, nil)
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-func runContainer(cli *client.Client, config Config) (string, error) {
-	portMapping := fmt.Sprintf("%d:%d", config.Port, config.Port)
-	config = &docker.ContainerConfig{
-		Image:        config.ContainerImage,
-		ExposedPorts: map[string]struct{}{portMapping: {}},
-		HostConfig: &docker.HostConfig{
-			PortBindings: map[string][]string{portMapping: {fmt.Sprintf("%d", config.Port)}},
-		},
-	}
+// 	return resp.ID, nil
+// }
 
-	resp, err := cli.ContainerCreate(ctx, config, nil, nil, "")
-	if err != nil {
-		return "", err
-	}
+// func startServer(port int) {
+// 	// Implement your server logic here.
+// 	// This could be a simple HTTP server listening on the port
+// 	// or any other kind of server you need.
 
-	err = cli.ContainerStart(ctx, resp.ID, nil)
-	if err != nil {
-		return "", err
-	}
+// 	logrus.Infof("Server listening on port %d", port)
+// 	// ... (your server code)
+// }
 
-	return resp.ID, nil
-}
+// func monitorContainer(cli *client.Client, containerID string) {
+// 	ch := cli.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
+// 	exitCode, err := <-ch
+// 	if err != nil {
+// 		log.Fatal(err)
+// 	}
 
-func startServer(port int) {
-	// Implement your server logic here.
-	// This could be a simple HTTP server listening on the port
-	// or any other kind of server you need.
+// 	logrus.Infof("Container exited with code %d", exitCode)
+// 	// Handle container exit (e.g., restart, log error)
+// }
 
-	logrus.Infof("Server listening on port %d", port)
-	// ... (your server code)
-}
-
-func monitorContainer(cli *client.Client, containerID string) {
-	ch := cli.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
-	exitCode, err := <-ch
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	logrus.Infof("Container exited with code %d", exitCode)
-	// Handle container exit (e.g., restart, log error)
-}
-
-var ctx = context.Background()
+// var ctx = context.Background()

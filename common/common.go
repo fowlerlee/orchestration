@@ -1,4 +1,4 @@
-package main
+package common
 
 type DoTaskArgs struct {
 	JobName    string
@@ -11,5 +11,5 @@ type RegisterArgs struct {
 
 type ResultArgs struct {
 	JobName    string
-	statusCode int
+	StatusCode int
 }
