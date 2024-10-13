@@ -5,6 +5,7 @@ import (
 
 	"strconv"
 
+	"github.com/fowlerlee/orchestration/common"
 	"github.com/fowlerlee/orchestration/manager"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
@@ -17,7 +18,7 @@ func main() {
 
 	manager := &manager.Manager{
 		ID:              uuid.New(),
-		Queue:           queue.Queue{},
+		Queue:           common.Queue{Items: []string{"emptytask"}},
 		RegisterChannel: sharedChan,
 		State:           manager.MState(manager.Ready),
 	}

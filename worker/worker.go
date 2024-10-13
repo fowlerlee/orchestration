@@ -2,18 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 
-	"io"
-	"log"
-	"os"
 	"sync"
 
-	"github.com/docker/docker/api/types/image"
-	"github.com/docker/docker/api/types/network"
+	"github.com/fowlerlee/orchestration/common"
+
+	_ "github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/container"
+	_ "github.com/docker/docker/container"
 	"github.com/docker/go-connections/nat"
-	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
 	// "github.com/sirupsen/logrus"
 )
@@ -38,12 +36,29 @@ type Config struct {
 }
 
 type Worker struct {
+	ctx context.Context
 	sync.Mutex
-	ID      uuid.UUID
-	Queue   queue.Queue
-	Channel chan string
-	State   wState
-	Docker  Docker
+	ID          uuid.UUID
+	Queue       common.Queue
+	Channel     chan string
+	State       wState
+	D           Docker
+	DockerImage string
+	Address     string
+}
+
+func CreateWorker(address string) (wk *Worker) {
+	wk = new(Worker)
+	wk.Channel = make(chan string)
+	wk.ID = uuid.New()
+	wk.State = Waiting
+	wk.Queue = common.Queue{Items: make([]string, 5)}
+	wk.Address = address
+	return
+}
+
+func startWorkerRPC() {
+
 }
 
 type Docker struct {
@@ -58,24 +73,35 @@ type DockerResult struct {
 	Result      string
 }
 
-func (d *Docker) Run() DockerResult {
-	ctx := context.Background()
-	reader, err := d.Client.ImagePull(ctx, d.Config.Image, image.PullOptions{})
-	if err != nil {
-		log.Printf("Error pulling image %s: %v \n", d.Config)
-		return DockerResult{Error: err}
-	}
-	io.Copy(os.Stdout, reader)
+func (wk *Worker) AssignWork(args *common.AssignWorkArgs, result *common.AssignWorkResults) error {
+	wk.Mutex.Lock()
+	defer wk.Mutex.Unlock()
+	wk.DockerImage = args.ImageName
+	wk.ContainerCreate(wk.ctx)
+	result.WorkIsGiven = true
+	return nil
+}
+
+func (w *Worker) Run() DockerResult {
+	// ctx := context.Background()
+	// reader, err := w.D.Client.ImagePull(ctx, w.D.Config.Image, image.PullOptions{})
+	// if err != nil {
+	// 	log.Printf("Error pulling image %s: %v \n", d.Config)
+	// 	return DockerResult{Error: err}
+	// }
+	// io.Copy(os.Stdout, reader)
 	return DockerResult{Result: "performed an image pull"}
 }
 
-func (cli *Client) ContainerCreate(
-	ctx context.Context,
-	config *container.Container,
-	hostConfig *container.ExecConfig,
-	networkingConfig *network.NetworkingConfig,
-	// platform *specs.Platform,
-	containerName string)
+func (w *Worker) ContainerCreate(ctx context.Context) bool {
+	fmt.Println("create container for the worker and do Task")
+	// config := &Config{}
+	// w.D.Client.ContainerExecCreate(
+	// 	ctx, w.DockerImage,
+	// 	config, config,
+	// )
+	return true
+}
 
 // func main() {
 // 	// Load configuration (you can replace this with environment variables, flags etc.)
