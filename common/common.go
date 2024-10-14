@@ -25,10 +25,16 @@ type AssignWorkResults struct {
 }
 
 type MasterShutdownArgs struct {
-	Shutdown string
 }
 
 type MasterShutdownReply struct {
+	Shutdown bool
+}
+
+type WorkerShutdownArgs struct {
+}
+
+type WorkerShutdownReply struct {
 	Shutdown bool
 }
 

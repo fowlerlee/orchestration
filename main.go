@@ -2,41 +2,57 @@ package main
 
 import (
 	"fmt"
-
-	"strconv"
+	"time"
 
 	"github.com/fowlerlee/orchestration/common"
 	"github.com/fowlerlee/orchestration/manager"
-	"github.com/golang-collections/collections/queue"
-	"github.com/google/uuid"
+	"github.com/fowlerlee/orchestration/worker"
 )
 
 func main() {
-	fmt.Println("running main")
+	fmt.Println("Enter commands for number of workers: ")
+	var m *manager.Manager
+	addressManager := "localhost:8081"
+	addressWorker1 := "localhost:8082"
+	addressWorker2 := "localhost:8083"
+	// addressClient := "localhost:8084"
 
-	sharedChan := make(chan string, 10)
+	m = manager.MakeManager(addressManager)
 
-	manager := &manager.Manager{
-		ID:              uuid.New(),
-		Queue:           common.Queue{Items: []string{"emptytask"}},
-		RegisterChannel: sharedChan,
-		State:           manager.MState(manager.Ready),
-	}
+	m.StartManagerRPC()
 
-	client := &Client{
-		ID:      uuid.New(),
-		Queue:   *queue.New(),
-		Channel: sharedChan,
-		State:   AssignTask,
-	}
+	w1 := worker.CreateWorker(addressWorker1)
+	w2 := worker.CreateWorker(addressWorker2)
 
-	manager.SendMessagesToWorkers([]string{"sms1", "sms2", "sms3"})
-	fmt.Println("value ‰v ", manager)
+	w1.StartWorkerRPC()
+	w2.StartWorkerRPC()
 
-	readChan := client.Channel
+	args := &common.AssignWorkArgs{ImageName: "alpine: 1"}
+	reply := &common.AssignWorkResults{}
 
-	for _, v := range <-readChan {
-		fmt.Println("Print out messages received")
-		fmt.Printf("value :%s ", strconv.QuoteRune(v))
-	}
+	args = &common.AssignWorkArgs{ImageName: "alpine: 2"}
+
+	time.Sleep(time.Second * 5)
+
+	m.AssignWorkToWorker(addressWorker1, args, reply)
+
+	m.AssignWorkToWorker(addressWorker2, args, reply)
+
+	fmt.Printf("worker 1 given work image: %s \n", w1.DockerImage)
+	fmt.Printf("worker 2 given work image: %s \n", w2.DockerImage)
+
+	// close all resources manually
+	w1.StopWorkerRPC()
+	w2.StopWorkerRPC()
+	m.StopManagerRPC()
+
+	fmt.Println("program exited from main with all resources cleaned up")
+
+	// client := &Client{
+	// 	ID:      uuid.New(),
+	// 	Queue:   *queue.New(),
+	// 	Channel: sharedChan,
+	// 	State:   AssignTask,
+	// }
+
 }

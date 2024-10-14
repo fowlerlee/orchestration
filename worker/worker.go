@@ -1,17 +1,16 @@
-package main
+package worker
 
 import (
 	"context"
 	"fmt"
+	"log"
+	"net"
+	"net/rpc"
+	"os"
 
 	"sync"
 
 	"github.com/fowlerlee/orchestration/common"
-
-	_ "github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/client"
-	_ "github.com/docker/docker/container"
-	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
 	// "github.com/sirupsen/logrus"
 )
@@ -26,7 +25,6 @@ const (
 // Config holds configuration for the worker node
 type Config struct {
 	Name          string
-	ExposedPorts  nat.PortSet
 	Cmd           []string
 	Memory        int64
 	Disk          int64
@@ -45,6 +43,8 @@ type Worker struct {
 	D           Docker
 	DockerImage string
 	Address     string
+	l           net.Listener
+	shutdown    chan struct{}
 }
 
 func CreateWorker(address string) (wk *Worker) {
@@ -54,16 +54,70 @@ func CreateWorker(address string) (wk *Worker) {
 	wk.State = Waiting
 	wk.Queue = common.Queue{Items: make([]string, 5)}
 	wk.Address = address
+	wk.shutdown = make(chan struct{}, 1)
 	return
 }
 
-func startWorkerRPC() {
+func (w *Worker) StartWorkerRPC() {
+	rpcs := rpc.NewServer()
+	errX := rpcs.Register(w)
+	if errX != nil {
+		log.Fatalf("failed to register worker with rpc server: %v", errX)
+	}
+	os.Remove(w.Address)
+	l, err := net.Listen("tcp", w.Address)
+	if err != nil {
+		log.Fatalf("worker RPC server not initiated: %v", err)
+	}
+	w.l = l
+	fmt.Println("worker rpc seems to be live!")
 
+	go func() {
+	loop:
+		for {
+			select {
+			case <-w.shutdown:
+				break loop
+			default:
+			}
+			conn, err := w.l.Accept()
+			if err == nil {
+				go func() {
+					rpcs.ServeConn(conn)
+					conn.Close()
+				}()
+			} else {
+				fmt.Printf("error accepting request from client, %v", err)
+			}
+			fmt.Println("successfully handled RPC call")
+		}
+	}()
 }
 
 type Docker struct {
-	Client *client.Client
 	Config Config
+}
+
+func (w *Worker) StopWorkerRPC() error {
+	args := &common.WorkerShutdownArgs{}
+	reply := &common.WorkerShutdownReply{}
+	c, err := rpc.Dial("tcp", w.Address)
+	if err != nil {
+		return err
+	}
+	err = c.Call("Worker.Shutdown", args, reply)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *Worker) Shutdown(args *common.WorkerShutdownArgs, reply *common.WorkerShutdownReply) error {
+	w.shutdown <- struct{}{}
+	close(w.shutdown)
+	w.l.Close()
+	fmt.Printf("worker at address %v was stopped and cleaned up\n", w.Address)
+	return nil
 }
 
 type DockerResult struct {
@@ -79,6 +133,7 @@ func (wk *Worker) AssignWork(args *common.AssignWorkArgs, result *common.AssignW
 	wk.DockerImage = args.ImageName
 	wk.ContainerCreate(wk.ctx)
 	result.WorkIsGiven = true
+	fmt.Printf("work was assigned to the Worker at %v\n", wk.Address)
 	return nil
 }
 

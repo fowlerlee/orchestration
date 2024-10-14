@@ -45,6 +45,7 @@ func MakeManager(address string) *Manager {
 		Workers:         make([]string, 5),
 		WorkerTaskMap:   make(map[string][]uuid.UUID),
 		State:           Ready,
+		shutdown:        make(chan struct{}, 1),
 	}
 }
 
@@ -59,15 +60,19 @@ func (m *Manager) Register(args *common.RegisterArgs, reply *int) error {
 	return nil
 }
 
-func (m *Manager) startManagerRPC() {
+func (m *Manager) StartManagerRPC() {
 	rpcs := rpc.NewServer()
-	rpcs.Register(m)
+	errX := rpcs.Register(m)
+	if errX != nil {
+		fmt.Println("failed to register manager with rpc server")
+	}
 	os.Remove(m.address)
-	l, err := net.Listen("unix", m.address)
+	l, err := net.Listen("tcp", m.address)
 	if err != nil {
-		log.Fatalf("Manager RPC Server not created at %v", m.address)
+		log.Fatalf("manager RPC Server not created at %v", m.address)
 	}
 	m.l = l
+	fmt.Println("manager rpc seems to be live!")
 
 	go func() {
 	loop:
@@ -78,7 +83,7 @@ func (m *Manager) startManagerRPC() {
 			default:
 			}
 			conn, err := m.l.Accept()
-			if err != nil {
+			if err == nil {
 				go func() {
 					rpcs.ServeConn(conn)
 					conn.Close()
@@ -86,44 +91,48 @@ func (m *Manager) startManagerRPC() {
 			} else {
 				fmt.Printf("error accepting request from client: %v", err)
 			}
-			fmt.Println("Successfully handled RPC call")
+			fmt.Println("successfully handled RPC call")
 		}
 	}()
 }
 
-func (m *Manager) assignWorkToWorkers(address string, args any, reply any) error {
-	c, err := rpc.Dial("unix", address)
+func (m *Manager) AssignWorkToWorker(address string, args *common.AssignWorkArgs, reply *common.AssignWorkResults) error {
+	fmt.Printf("attempting to connect to worker at address: %s\n", address)
+	c, err := rpc.Dial("tcp", address)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to dial worker: %v", err)
 	}
 	defer c.Close()
 
 	err = c.Call("Worker.AssignWork", args, reply)
 	if err != nil {
+		return fmt.Errorf("rpc call to Worker.AssignWork failed: %v", err)
+	}
+	return nil
+}
+
+func (m *Manager) StopManagerRPC() error {
+	reply := &common.MasterShutdownReply{}
+	args := &common.MasterShutdownArgs{}
+	c, err := rpc.Dial("tcp", m.address)
+	if err != nil {
+		return err
+	}
+	err = c.Call("Manager.Shutdown", args, reply)
+	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (m *Manager) stopManagerRPC() error {
-	reply := common.MasterShutdownReply{}
-	c, err := rpc.Dial("unix", m.address)
-	if err != nil {
-		return err
-	}
-	args := common.MasterShutdownArgs{Shutdown: "shutdown"}
-	err = c.Call("Master.Shutdown", args, reply)
-	if err != nil {
-		return err
-	}
-	return nil
-}
+func (m *Manager) Shutdown(args *common.MasterShutdownReply, reply *common.MasterShutdownArgs) error {
 
-func (m *Manager) Shutdown(args common.MasterShutdownArgs, reply *common.MasterShutdownReply) error {
-	if args.Shutdown == "shutdown" {
-		close(m.shutdown)
-	}
+	// todo - get workers ip address then close resources
+	m.shutdown <- struct{}{}
+	close(m.shutdown)
+
 	m.l.Close()
+	fmt.Println("manager was stopped and cleaned up")
 	return nil
 }
 
@@ -183,4 +192,3 @@ func (m *Manager) SendMessagesToWorkers(s []string) string {
 	}
 	return "Messages sent to workers"
 }
-
