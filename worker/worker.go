@@ -89,7 +89,7 @@ func (w *Worker) StartWorkerRPC() {
 			} else {
 				fmt.Printf("error accepting request from client, %v", err)
 			}
-			fmt.Println("successfully handled RPC call")
+			fmt.Println("worker successfully handled RPC call")
 		}
 	}()
 }

@@ -1,11 +1,9 @@
 package manager
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
-	http "net/http"
 	"net/rpc"
 	"os"
 	"sync"
@@ -91,7 +89,7 @@ func (m *Manager) StartManagerRPC() {
 			} else {
 				fmt.Printf("error accepting request from client: %v", err)
 			}
-			fmt.Println("successfully handled RPC call")
+			fmt.Println("manager successfully handled RPC call")
 		}
 	}()
 }
@@ -136,59 +134,9 @@ func (m *Manager) Shutdown(args *common.MasterShutdownReply, reply *common.Maste
 	return nil
 }
 
-func (m *Manager) GiveManagerWork(args *common.DoTaskArgs, reply *common.ResultArgs) error {
+func (m *Manager) GiveManagerWork(args *common.ClientManagerArgs, reply *common.ClientManageResult) error {
 	m.Queue.Items = append(m.Queue.Items, args.JobName)
-	reply.JobName = args.JobName
+	reply.Reply = args.JobName
 	reply.StatusCode = 200
 	return nil
-}
-
-func submitHandler(w http.ResponseWriter, r *http.Request) {
-	// Check request method (optional but recommended)
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Parse request body
-	err := r.ParseForm()
-	if err != nil {
-		http.Error(w, "Failed to parse request body", http.StatusBadRequest)
-		return
-	}
-
-	// Access form data (replace "data" with the actual field name)
-	data := r.FormValue("data")
-
-	// Process the data (replace with your logic)
-	result := processData(data)
-
-	// Respond with JSON (or your preferred format)
-	response := map[string]interface{}{"message": result}
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(response)
-	if err != nil {
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
-}
-
-// processData function (replace with your actual data processing logic)
-func processData(data string) string {
-	// Perform actions on the data
-	// ...
-	return "Data processed successfully!"
-}
-
-func (m *Manager) SendMessagesToWorkers(s []string) string {
-	for _, i := range s {
-		if i == " " || i == "." {
-			fmt.Println("The Message from the Manager is empty: ")
-		}
-		if m.RegisterChannel != nil { // ensure it doesnt panic
-			fmt.Printf("sending on channel: %s", i)
-			m.RegisterChannel <- i
-		}
-	}
-	return "Messages sent to workers"
 }

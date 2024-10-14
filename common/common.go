@@ -38,6 +38,22 @@ type WorkerShutdownReply struct {
 	Shutdown bool
 }
 
+type ClientManagerArgs struct {
+	JobName string
+}
+
+type ClientManageResult struct {
+	Reply      string
+	StatusCode int
+}
+
+type ClientShutdownArgs struct {
+}
+
+type ClientShutdownReply struct {
+	Shutdown bool
+}
+
 type Queue struct {
 	Items []string
 	lock  sync.Mutex
