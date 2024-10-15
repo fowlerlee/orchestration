@@ -65,7 +65,7 @@ func (m *Manager) StartManagerRPC() {
 		fmt.Println("failed to register manager with rpc server")
 	}
 	os.Remove(m.address)
-	l, err := net.Listen("tcp", m.address)
+	l, err := net.Listen(common.Protocol, m.address)
 	if err != nil {
 		log.Fatalf("manager RPC Server not created at %v", m.address)
 	}
@@ -96,15 +96,11 @@ func (m *Manager) StartManagerRPC() {
 
 func (m *Manager) AssignWorkToWorker(address string, args *common.AssignWorkArgs, reply *common.AssignWorkResults) error {
 	fmt.Printf("attempting to connect to worker at address: %s\n", address)
-	c, err := rpc.Dial("tcp", address)
-	if err != nil {
-		return fmt.Errorf("failed to dial worker: %v", err)
-	}
-	defer c.Close()
+	rpcName := "Worker.AssignWork"
 
-	err = c.Call("Worker.AssignWork", args, reply)
-	if err != nil {
-		return fmt.Errorf("rpc call to Worker.AssignWork failed: %v", err)
+	ok := common.RpcCall(address, rpcName, args, reply)
+	if !ok {
+		return fmt.Errorf("failed to call the %v rpc method", rpcName)
 	}
 	return nil
 }
@@ -112,13 +108,11 @@ func (m *Manager) AssignWorkToWorker(address string, args *common.AssignWorkArgs
 func (m *Manager) StopManagerRPC() error {
 	reply := &common.MasterShutdownReply{}
 	args := &common.MasterShutdownArgs{}
-	c, err := rpc.Dial("tcp", m.address)
-	if err != nil {
-		return err
-	}
-	err = c.Call("Manager.Shutdown", args, reply)
-	if err != nil {
-		return err
+	rpcMethod := "Manager.Shutdown"
+
+	ok := common.RpcCall(m.address, rpcMethod, args, reply)
+	if !ok {
+		return fmt.Errorf("failed to call the %v rpc method \n", rpcMethod)
 	}
 	return nil
 }

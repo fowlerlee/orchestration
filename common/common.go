@@ -1,6 +1,14 @@
 package common
 
-import "sync"
+import (
+	"fmt"
+	"net/rpc"
+	"sync"
+)
+
+const (
+	Protocol = "tcp"
+)
 
 type DoTaskArgs struct {
 	JobName    string
@@ -74,4 +82,21 @@ func (q *Queue) Dequeue() (string, bool) {
 	item := q.Items[0]
 	q.Items = q.Items[1:]
 	return item, true
+}
+
+func RpcCall(srv string, rpcname string,
+	args interface{}, reply interface{}) bool {
+	c, errx := rpc.Dial(Protocol, srv)
+	if errx != nil {
+		return false
+	}
+	defer c.Close()
+
+	err := c.Call(rpcname, args, reply)
+	if err != nil {
+		return false
+	}
+
+	fmt.Printf("CALLED RPC %v FROM COMMON \n", rpcname)
+	return true
 }

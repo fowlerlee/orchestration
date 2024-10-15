@@ -12,7 +12,6 @@ import (
 
 	"github.com/fowlerlee/orchestration/common"
 	"github.com/google/uuid"
-	// "github.com/sirupsen/logrus"
 )
 
 type wState string
@@ -65,7 +64,7 @@ func (w *Worker) StartWorkerRPC() {
 		log.Fatalf("failed to register worker with rpc server: %v", errX)
 	}
 	os.Remove(w.Address)
-	l, err := net.Listen("tcp", w.Address)
+	l, err := net.Listen(common.Protocol, w.Address)
 	if err != nil {
 		log.Fatalf("worker RPC server not initiated: %v", err)
 	}
@@ -101,13 +100,11 @@ type Docker struct {
 func (w *Worker) StopWorkerRPC() error {
 	args := &common.WorkerShutdownArgs{}
 	reply := &common.WorkerShutdownReply{}
-	c, err := rpc.Dial("tcp", w.Address)
-	if err != nil {
-		return err
-	}
-	err = c.Call("Worker.Shutdown", args, reply)
-	if err != nil {
-		return err
+	rpcName := "Worker.Shutdown"
+
+	ok := common.RpcCall(w.Address, rpcName, args, reply)
+	if !ok {
+		return fmt.Errorf("failed to call %v rpc method", rpcName)
 	}
 	return nil
 }
