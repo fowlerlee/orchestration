@@ -16,7 +16,11 @@ type DoTaskArgs struct {
 }
 
 type RegisterArgs struct {
-	WorkerName string
+	WorkerAddress string
+}
+
+type RegisterResult struct {
+	Success bool
 }
 
 type ResultArgs struct {

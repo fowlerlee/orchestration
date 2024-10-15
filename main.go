@@ -41,8 +41,11 @@ func main() {
 	w1.StartWorkerRPC()
 	w2.StartWorkerRPC()
 	w3.StartWorkerRPC()
+	w1.RegisterWithManager(addressManager)
+	w2.RegisterWithManager(addressManager)
+	w3.RegisterWithManager(addressManager)
 
-	time.Sleep(time.Second * 2)
+	time.Sleep(2 * time.Millisecond)
 	argsCl := &common.ClientManagerArgs{}
 	replyCl := &common.ClientManageResult{}
 	c.AssignWorkToManager(addressManager, argsCl, replyCl)
@@ -62,9 +65,6 @@ func main() {
 	fmt.Printf("worker 2 given work image: %s \n", w3.DockerImage)
 
 	// close all resources manually
-	w1.StopWorkerRPC()
-	w2.StopWorkerRPC()
-	w3.StopWorkerRPC()
 	m.StopManagerRPC()
 	c.StopClientRPC()
 

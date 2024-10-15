@@ -109,6 +109,19 @@ func (w *Worker) StopWorkerRPC() error {
 	return nil
 }
 
+func (w *Worker) RegisterWithManager(address string) error {
+	w.Lock()
+	defer w.Unlock()
+	args := &common.RegisterArgs{WorkerAddress: w.Address}
+	reply := &common.RegisterResult{}
+	rpcName := "Manager.Register"
+	ok := common.RpcCall(address, rpcName, args, reply)
+	if !ok {
+		return fmt.Errorf("failed to call %v rpc method\n", rpcName)
+	}
+	return nil
+}
+
 func (w *Worker) Shutdown(args *common.WorkerShutdownArgs, reply *common.WorkerShutdownReply) error {
 	w.shutdown <- struct{}{}
 	close(w.shutdown)

@@ -40,21 +40,22 @@ func MakeManager(address string) *Manager {
 		ID:              uuid.New(),
 		Queue:           common.Queue{Items: make([]string, 5)},
 		RegisterChannel: make(chan string),
-		Workers:         make([]string, 5),
+		Workers:         make([]string, 0, 5),
 		WorkerTaskMap:   make(map[string][]uuid.UUID),
 		State:           Ready,
 		shutdown:        make(chan struct{}, 1),
 	}
 }
 
-func (m *Manager) Register(args *common.RegisterArgs, reply *int) error {
+func (m *Manager) Register(args *common.RegisterArgs, reply *common.RegisterResult) error {
 	m.Lock()
 	defer m.Unlock()
-	m.Workers = append(m.Workers, args.WorkerName)
+	m.Workers = append(m.Workers, args.WorkerAddress)
 	go func() {
-		m.RegisterChannel <- args.WorkerName
+		m.RegisterChannel <- args.WorkerAddress
 	}()
-	*reply = 200
+	fmt.Printf("WORKER %v registered with the MANAGER", args.WorkerAddress)
+	reply.Success = true
 	return nil
 }
 
@@ -106,6 +107,10 @@ func (m *Manager) AssignWorkToWorker(address string, args *common.AssignWorkArgs
 }
 
 func (m *Manager) StopManagerRPC() error {
+	err := m.stopWorkers()
+	if err != nil {
+		return err
+	}
 	reply := &common.MasterShutdownReply{}
 	args := &common.MasterShutdownArgs{}
 	rpcMethod := "Manager.Shutdown"
@@ -125,6 +130,18 @@ func (m *Manager) Shutdown(args *common.MasterShutdownReply, reply *common.Maste
 
 	m.l.Close()
 	fmt.Println("manager was stopped and cleaned up")
+	return nil
+}
+
+func (m *Manager) stopWorkers() error {
+	args := &common.WorkerShutdownArgs{}
+	reply := &common.WorkerShutdownReply{}
+	for _, v := range m.Workers {
+		ok := common.RpcCall(v, "Worker.Shutdown", args, reply)
+		if !ok {
+			return fmt.Errorf("failed to shutdown Worker at: %v \n", v)
+		}
+	}
 	return nil
 }
 
