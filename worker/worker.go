@@ -2,11 +2,13 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/rpc"
 	"os"
+	"path/filepath"
 
 	"sync"
 
@@ -32,6 +34,10 @@ type Config struct {
 	Image         string
 }
 
+type Docker struct {
+	Config Config
+}
+
 type Worker struct {
 	ctx context.Context
 	sync.Mutex
@@ -44,6 +50,8 @@ type Worker struct {
 	Address     string
 	l           net.Listener
 	shutdown    chan struct{}
+	kVStore     map[string]string
+	storageFile string
 }
 
 func CreateWorker(address string) (wk *Worker) {
@@ -51,10 +59,67 @@ func CreateWorker(address string) (wk *Worker) {
 	wk.Channel = make(chan string)
 	wk.ID = uuid.New()
 	wk.State = Waiting
-	wk.Queue = common.Queue{Items: make([]string, 5)}
+	wk.Queue = common.Queue{Items: make([]string, 0, 5)}
 	wk.Address = address
 	wk.shutdown = make(chan struct{}, 1)
+	wk.initKVStore()
+	wk.loadFromFile()
 	return
+}
+
+func (w *Worker) initKVStore() {
+	w.kVStore = make(map[string]string)
+	tempDir := os.TempDir()
+	w.storageFile = filepath.Join(tempDir, fmt.Sprintf("worker_%s_store.json", w.ID))
+
+}
+
+func (w *Worker) SetKV(key, value string) error {
+	w.Lock()
+	defer w.Unlock()
+	w.kVStore[key] = value
+	err := w.saveToFile()
+	if err != nil {
+		return fmt.Errorf("failed to save KVStore to file")
+	}
+	return nil
+}
+
+func (w *Worker) GetKV(key string) (string, bool) {
+	w.Lock()
+	defer w.Unlock()
+	value, exists := w.kVStore[key]
+	return value, exists
+}
+
+func (w *Worker) Delete(key string) {
+	w.Lock()
+	defer w.Unlock()
+	delete(w.kVStore, key)
+	w.saveToFile()
+}
+
+func (w *Worker) saveToFile() error {
+	data, err := json.Marshal(w.kVStore)
+	if err != nil {
+		return fmt.Errorf("error performing json marshalling of kvstore")
+	}
+	return os.WriteFile(w.storageFile, data, 0644)
+}
+
+func (w *Worker) loadFromFile() error {
+	data, err := os.ReadFile(w.storageFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return json.Unmarshal(data, &w.kVStore)
+}
+
+func (w *Worker) CleanupKVStore() {
+	os.Remove(w.storageFile)
 }
 
 func (w *Worker) StartWorkerRPC() {
@@ -93,10 +158,6 @@ func (w *Worker) StartWorkerRPC() {
 	}()
 }
 
-type Docker struct {
-	Config Config
-}
-
 func (w *Worker) StopWorkerRPC() error {
 	args := &common.WorkerShutdownArgs{}
 	reply := &common.WorkerShutdownReply{}
@@ -126,6 +187,7 @@ func (w *Worker) Shutdown(args *common.WorkerShutdownArgs, reply *common.WorkerS
 	w.shutdown <- struct{}{}
 	close(w.shutdown)
 	w.l.Close()
+	w.CleanupKVStore()
 	fmt.Printf("worker at address %v was stopped and cleaned up\n", w.Address)
 	return nil
 }
@@ -148,100 +210,12 @@ func (wk *Worker) AssignWork(args *common.AssignWorkArgs, result *common.AssignW
 }
 
 func (w *Worker) Run() DockerResult {
-	// ctx := context.Background()
-	// reader, err := w.D.Client.ImagePull(ctx, w.D.Config.Image, image.PullOptions{})
-	// if err != nil {
-	// 	log.Printf("Error pulling image %s: %v \n", d.Config)
-	// 	return DockerResult{Error: err}
-	// }
-	// io.Copy(os.Stdout, reader)
+	// func to use Docker containers
 	return DockerResult{Result: "performed an image pull"}
 }
 
 func (w *Worker) ContainerCreate(ctx context.Context) bool {
 	fmt.Println("create container for the worker and do Task")
-	// config := &Config{}
-	// w.D.Client.ContainerExecCreate(
-	// 	ctx, w.DockerImage,
-	// 	config, config,
-	// )
+	// func to create Docker container from image
 	return true
 }
-
-// func main() {
-// 	// Load configuration (you can replace this with environment variables, flags etc.)
-// 	config := Config{
-// 		ServerAddress: "http://localhost:5432",
-// 		ContainerImage: "postgres:alpine3.19",
-// 		Port:          8081,
-// 	}
-
-// 	// Create a new Docker client
-// 	cli, err := client.NewClientWithOpts(client.WithHost(config.ServerAddress))
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	// Pull the container image
-// 	err = pullImage(cli, config.ContainerImage)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	// Run the container
-// 	containerID, err := runContainer(cli, config)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	// Start the server on the exposed port
-// 	startServer(config.Port)
-
-// 	// Monitor the container for exit and handle gracefully
-// 	monitorContainer(cli, containerID)
-// }
-
-// func runContainer(cli *client.Client, config Config) (string, error) {
-// 	portMapping := fmt.Sprintf("%d:%d", config.Port, config.Port)
-// 	config = &docker.ContainerConfig{
-// 		Image:        config.ContainerImage,
-// 		ExposedPorts: map[string]struct{}{portMapping: {}},
-// 		HostConfig: &docker.HostConfig{
-// 			PortBindings: map[string][]string{portMapping: {fmt.Sprintf("%d", config.Port)}},
-// 		},
-// 	}
-
-// 	resp, err := cli.ContainerCreate(ctx, config, nil, nil, "")
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	err = cli.ContainerStart(ctx, resp.ID, nil)
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	return resp.ID, nil
-// }
-
-// func startServer(port int) {
-// 	// Implement your server logic here.
-// 	// This could be a simple HTTP server listening on the port
-// 	// or any other kind of server you need.
-
-// 	logrus.Infof("Server listening on port %d", port)
-// 	// ... (your server code)
-// }
-
-// func monitorContainer(cli *client.Client, containerID string) {
-// 	ch := cli.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
-// 	exitCode, err := <-ch
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-
-// 	logrus.Infof("Container exited with code %d", exitCode)
-// 	// Handle container exit (e.g., restart, log error)
-// }
-
-// var ctx = context.Background()

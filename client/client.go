@@ -30,7 +30,7 @@ func MakeClient(address string) *Client {
 	c := new(Client)
 	c.address = address
 	c.ID = uuid.New()
-	c.Queue = common.Queue{Items: make([]string, 5)}
+	c.Queue = common.Queue{Items: make([]string, 0, 5)}
 	c.shutdown = make(chan struct{}, 1)
 	c.State = Idle
 	return c

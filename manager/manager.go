@@ -106,6 +106,7 @@ func (m *Manager) AssignWorkToWorker(address string, args *common.AssignWorkArgs
 	return nil
 }
 
+// manager stops the workers that are registered to it
 func (m *Manager) StopManagerRPC() error {
 	err := m.stopWorkers()
 	if err != nil {
