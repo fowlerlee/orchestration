@@ -49,6 +49,7 @@ type Worker struct {
 	DockerImage string
 	Address     string
 	l           net.Listener
+	managerIP   string
 	shutdown    chan struct{}
 	kVStore     map[string]string
 	storageFile string
@@ -173,6 +174,7 @@ func (w *Worker) StopWorkerRPC() error {
 func (w *Worker) RegisterWithManager(address string) error {
 	w.Lock()
 	defer w.Unlock()
+	w.managerIP = address
 	args := &common.RegisterArgs{WorkerAddress: w.Address}
 	reply := &common.RegisterResult{}
 	rpcName := "Manager.Register"
@@ -207,6 +209,30 @@ func (wk *Worker) AssignWork(args *common.AssignWorkArgs, result *common.AssignW
 	result.WorkIsGiven = true
 	fmt.Printf("work was assigned to the Worker at %v\n", wk.Address)
 	return nil
+}
+
+func (w *Worker) getListOfWorkersKVStores() []string {
+	args := &common.KVArgs{}
+	reply := &common.KVResults{}
+	rpcName := "Master.GetListOfWorkersIP"
+	ok := common.RpcCall(w.managerIP, rpcName, args, reply)
+	if !ok {
+		fmt.Println("failed to call the %v rpc method", rpcName)
+	}
+	
+}
+
+func (w *Worker) replicateKVStores() error {
+	workersKVStores := w.getListOfWorkersKVStores()
+	for k, v := range workersKVStores {
+		if v != w.storageFile {
+			file, err := os.OpenFile(v, os.O_RDWR, 777)
+			if err != nil {
+				return err
+			}
+
+		}
+	}
 }
 
 func (w *Worker) Run() DockerResult {

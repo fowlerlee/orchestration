@@ -66,6 +66,14 @@ type ClientShutdownReply struct {
 	Shutdown bool
 }
 
+type KVArgs struct {
+	Input string
+}
+
+type KVResults struct {
+	WorkersIP []string
+}
+
 type Queue struct {
 	Items []string
 	lock  sync.Mutex
