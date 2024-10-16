@@ -214,12 +214,14 @@ func (wk *Worker) AssignWork(args *common.AssignWorkArgs, result *common.AssignW
 func (w *Worker) getListOfWorkersKVStores() []string {
 	args := &common.KVArgs{}
 	reply := &common.KVResults{}
+	var workerIPs []string
 	rpcName := "Master.GetListOfWorkersIP"
 	ok := common.RpcCall(w.managerIP, rpcName, args, reply)
 	if !ok {
 		fmt.Println("failed to call the %v rpc method", rpcName)
 	}
-	
+	workerIPs = reply.WorkersIP
+	return workerIPs
 }
 
 func (w *Worker) replicateKVStores() error {
@@ -230,9 +232,11 @@ func (w *Worker) replicateKVStores() error {
 			if err != nil {
 				return err
 			}
+			fmt.Printf("replicate worker %v KVStore by handling file: %v \n", k, file)
 
 		}
 	}
+	return nil
 }
 
 func (w *Worker) Run() DockerResult {
