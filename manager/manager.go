@@ -135,6 +135,8 @@ func (m *Manager) Shutdown(args *common.MasterShutdownReply, reply *common.Maste
 }
 
 func (m *Manager) stopWorkers() error {
+	m.Lock()
+	defer m.Unlock()
 	args := &common.WorkerShutdownArgs{}
 	reply := &common.WorkerShutdownReply{}
 	for _, v := range m.Workers {
@@ -147,8 +149,17 @@ func (m *Manager) stopWorkers() error {
 }
 
 func (m *Manager) GiveManagerWork(args *common.ClientManagerArgs, reply *common.ClientManageResult) error {
+	m.Lock()
+	defer m.Unlock()
 	m.Queue.Items = append(m.Queue.Items, args.JobName)
 	reply.Reply = args.JobName
 	reply.StatusCode = 200
+	return nil
+}
+
+func (m *Manager) GetListOfWorkersIP(_ *common.WorkerIPAddressArgs, reply *common.WorkerIPAddressResult) error {
+	m.Lock()
+	defer m.Unlock()
+	reply.WorkersIP = m.Workers
 	return nil
 }

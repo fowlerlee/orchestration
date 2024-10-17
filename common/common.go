@@ -66,11 +66,18 @@ type ClientShutdownReply struct {
 	Shutdown bool
 }
 
-type KVArgs struct {
-	Input string
+// type KVArgs struct {
+// 	Input string
+// }
+
+// type KVResults struct {
+// 	WorkersIP []string
+// }
+
+type WorkerIPAddressArgs struct {
 }
 
-type KVResults struct {
+type WorkerIPAddressResult struct {
 	WorkersIP []string
 }
 

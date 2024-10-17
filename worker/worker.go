@@ -41,18 +41,19 @@ type Docker struct {
 type Worker struct {
 	ctx context.Context
 	sync.Mutex
-	ID          uuid.UUID
-	Queue       common.Queue
-	Channel     chan string
-	State       wState
-	D           Docker
-	DockerImage string
-	Address     string
-	l           net.Listener
-	managerIP   string
-	shutdown    chan struct{}
-	kVStore     map[string]string
-	storageFile string
+	AllWorkerAddresses []string
+	ID                 uuid.UUID
+	Queue              common.Queue
+	Channel            chan string
+	State              wState
+	D                  Docker
+	DockerImage        string
+	Address            string
+	l                  net.Listener
+	managerIP          string
+	shutdown           chan struct{}
+	kVStore            map[string]string
+	storageFile        string
 }
 
 func CreateWorker(address string) (wk *Worker) {
@@ -212,28 +213,29 @@ func (wk *Worker) AssignWork(args *common.AssignWorkArgs, result *common.AssignW
 }
 
 func (w *Worker) getListOfWorkersKVStores() []string {
-	args := &common.KVArgs{}
-	reply := &common.KVResults{}
-	var workerIPs []string
+	w.Lock()
+	defer w.Unlock()
+	args := &common.WorkerIPAddressArgs{}
+	reply := &common.WorkerIPAddressResult{}
 	rpcName := "Master.GetListOfWorkersIP"
 	ok := common.RpcCall(w.managerIP, rpcName, args, reply)
 	if !ok {
 		fmt.Println("failed to call the %v rpc method", rpcName)
 	}
-	workerIPs = reply.WorkersIP
-	return workerIPs
+	w.AllWorkerAddresses = reply.WorkersIP
+	fmt.Print("GOT ALL WORKER ADDRESSES from MANAGER")
+	return w.AllWorkerAddresses
 }
 
-func (w *Worker) replicateKVStores() error {
+func (w *Worker) ReplicateKVStores() error {
 	workersKVStores := w.getListOfWorkersKVStores()
 	for k, v := range workersKVStores {
 		if v != w.storageFile {
-			file, err := os.OpenFile(v, os.O_RDWR, 777)
+			file, err := os.OpenFile(v, os.O_RDWR, 0644)
 			if err != nil {
 				return err
 			}
 			fmt.Printf("replicate worker %v KVStore by handling file: %v \n", k, file)
-
 		}
 	}
 	return nil

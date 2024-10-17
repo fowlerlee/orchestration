@@ -64,6 +64,8 @@ func main() {
 	fmt.Printf("worker 2 given work image: %s \n", w2.DockerImage)
 	fmt.Printf("worker 2 given work image: %s \n", w3.DockerImage)
 
+	w1.SetKV("k1", "v1")
+	w1.ReplicateKVStores()
 	// close all resources manually
 	m.StopManagerRPC()
 	c.StopClientRPC()
