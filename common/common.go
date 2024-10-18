@@ -88,11 +88,28 @@ type RequestVoteArgs struct {
 
 type RequestVoteReply struct {
 	VoteGranted bool
+	Term        int
 }
 
 type Queue struct {
 	Items []string
 	lock  sync.Mutex
+}
+
+type WorkerInfoArgs struct {
+}
+
+type WorkerInfoReply struct {
+	WorkersIPs []string
+}
+
+type HeartbeatArgs struct {
+	Term     int
+	LeaderID string
+}
+
+type HeartbeatReply struct {
+	Term int
 }
 
 func (q *Queue) Enqueue(item string) {
