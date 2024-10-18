@@ -81,6 +81,15 @@ type WorkerIPAddressResult struct {
 	WorkersIP []string
 }
 
+type RequestVoteArgs struct {
+	Term        int
+	CandidateID string
+}
+
+type RequestVoteReply struct {
+	VoteGranted bool
+}
+
 type Queue struct {
 	Items []string
 	lock  sync.Mutex

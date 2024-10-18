@@ -26,7 +26,7 @@ type Manager struct {
 
 	State           ManagerElectionState
 	OtherManagers   []string
-	LeaderAdress    string
+	LeaderAddress    string
 	Term            int
 	LastHeartbeat   time.Time
 	address         string
