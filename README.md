@@ -8,9 +8,12 @@ Please visit the Youtube channel where this project is recorded to learn more ab
 
 There exists a Client RPC Server that communicates with a Manager RPC Server, which in turn communicates with the Worker RPC Servers (3 in this case) that are required to register with the Manager to receive work. The Manager handles shutdown of the workers when work is complete and itself. The Workers handle cleaup of their own KVStore and data on each. See the image below for the architecture.
 
+A simple XOR erasure code procedure is used to allow a failed Worker to recover its lost data upon start up and after failure. Since Reed-Solomon is not used, failure of several Workers will not allow recovery of all Worker data.
+
 ## Goals:
 
 - Create Orchestrator Pattern - done
+- Implement XOR erasure codes for Workers on Managers and restore lost data - done
 - Demonstrate Raft consensus between several managers - ongoing
 - Demonstrate Lock Service for Manager communicating with several Clients - ongoing
 - Demonstrate KVRaft algorithm for the Workers and their KVStore - ongoing
