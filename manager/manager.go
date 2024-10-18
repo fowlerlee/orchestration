@@ -7,21 +7,28 @@ import (
 	"net/rpc"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/fowlerlee/orchestration/common"
 	"github.com/google/uuid"
 )
 
-type MState int
+type ManagerElectionState int
 
 const (
-	Ready MState = iota + 1
-	Busy
-	JobComplete
+	Follower ManagerElectionState = iota + 1
+	Candidate
+	Leader
 )
 
 type Manager struct {
 	sync.Mutex
+
+	State           ManagerElectionState
+	OtherManagers   []string
+	LeaderAdress    string
+	Term            int
+	LastHeartbeat   time.Time
 	address         string
 	doneChannel     chan bool
 	ID              uuid.UUID
@@ -29,7 +36,6 @@ type Manager struct {
 	RegisterChannel chan string
 	Workers         []string
 	WorkerTaskMap   map[string][]uuid.UUID
-	State           MState
 	l               net.Listener
 	shutdown        chan struct{}
 }
@@ -42,7 +48,7 @@ func MakeManager(address string) *Manager {
 		RegisterChannel: make(chan string),
 		Workers:         make([]string, 0, 5),
 		WorkerTaskMap:   make(map[string][]uuid.UUID),
-		State:           Ready,
+		State:           Follower,
 		shutdown:        make(chan struct{}, 1),
 	}
 }
