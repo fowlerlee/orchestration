@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -32,19 +33,21 @@ type Manager struct {
 	State           MState
 	l               net.Listener
 	shutdown        chan struct{}
+	WorkerBackups   map[string][][]byte
 }
 
 func MakeManager(address string) *Manager {
-	return &Manager{
-		address:         address,
-		ID:              uuid.New(),
-		Queue:           common.Queue{Items: make([]string, 5)},
-		RegisterChannel: make(chan string),
-		Workers:         make([]string, 0, 5),
-		WorkerTaskMap:   make(map[string][]uuid.UUID),
-		State:           Ready,
-		shutdown:        make(chan struct{}, 1),
-	}
+	m := new(Manager)
+	m.address = address
+	m.ID = uuid.New()
+	m.Queue = common.Queue{Items: make([]string, 5)}
+	m.RegisterChannel = make(chan string)
+	m.Workers = make([]string, 0, 5)
+	m.WorkerTaskMap = make(map[string][]uuid.UUID)
+	m.State = Ready
+	m.shutdown = make(chan struct{}, 1)
+	m.WorkerBackups = map[string][][]byte{}
+	return m
 }
 
 func (m *Manager) Register(args *common.RegisterArgs, reply *common.RegisterResult) error {
@@ -162,4 +165,54 @@ func (m *Manager) GetListOfWorkersIP(_ *common.WorkerIPAddressArgs, reply *commo
 	defer m.Unlock()
 	reply.WorkersIP = m.Workers
 	return nil
+}
+
+func (m *Manager) BackupWorkerData(args *common.BackupDataArgs, reply *common.BackupDataReply) error {
+	m.Lock()
+	defer m.Unlock()
+
+	m.WorkerBackups[args.WorkerID] = args.EncodedData
+	reply.Success = true
+	return nil
+}
+
+func (m *Manager) GetWorkerDataAfterRecovery(args *common.BackupDataArgs, reply *common.BackupDataReply) error {
+	m.Lock()
+	defer m.Unlock()
+
+	recoveredData, err := m.RecoverWorkerData(args.WorkerID)
+	if err != nil {
+		return err
+	}
+
+	encodedData, err := json.Marshal(recoveredData)
+	if err != nil {
+		return err
+	}
+
+	reply.EncodedData = encodedData
+	reply.Success = true
+	return nil
+}
+
+func (m *Manager) RecoverWorkerData(workerID string) (map[string]string, error) {
+	m.Lock()
+	defer m.Unlock()
+
+	encodedData, exists := m.WorkerBackups[workerID]
+	if !exists {
+		return nil, fmt.Errorf("no backup found for worker %s\n", workerID)
+	}
+
+	decodedData, err := common.DecodeXOR(encodedData)
+	if err != nil {
+		return nil, err
+	}
+
+	var kvStore map[string]string
+	err = json.Unmarshal(decodedData, &kvStore)
+	if err != nil {
+		return nil, err
+	}
+	return kvStore, nil
 }

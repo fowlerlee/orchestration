@@ -54,6 +54,7 @@ type Worker struct {
 	shutdown           chan struct{}
 	kVStore            map[string]string
 	storageFile        string
+	EncodedData        [][]byte
 }
 
 func CreateWorker(address string) (wk *Worker) {
@@ -72,8 +73,21 @@ func CreateWorker(address string) (wk *Worker) {
 func (w *Worker) initKVStore() {
 	w.kVStore = make(map[string]string)
 	tempDir := os.TempDir()
-	w.storageFile = filepath.Join(tempDir, fmt.Sprintf("worker_%s_store.json", w.ID))
+	w.storageFile = filepath.Join(tempDir, fmt.Sprintf("worker_%s_store.json", w.Address))
 
+	err := w.loadFromFile()
+	if err != nil {
+		if os.IsNotExist(err) {
+			recoverErr := w.RecoverDataFromManager()
+			if recoverErr != nil {
+				log.Printf("failed to recover data from manager: %v", recoverErr)
+				w.kVStore = map[string]string{}
+			}
+		} else {
+			log.Printf("error loading from file: %v", err)
+			w.kVStore = make(map[string]string)
+		}
+	}
 }
 
 func (w *Worker) SetKV(key, value string) error {
