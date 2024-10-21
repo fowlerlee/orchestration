@@ -36,16 +36,19 @@ func (c *Container) WriteMemory(address uint, data []byte) error {
 }
 
 func (c *Container) ReadMemory(address uint, size uint) ([]byte, error) {
+	fmt.Printf("ReadMemory called with address %d, size %d\n", address, size)
 	result := make([]byte, size)
 	for i := uint(0); i < size; i++ {
 		pageIndex := (address + i) / PageSize
 		offset := (address + i) % PageSize
+		fmt.Printf("Reading byte at address %d (page %d, offset %d)\n", address+i, pageIndex, offset)
 		b, err := c.vm.Read(pageIndex, offset)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error reading at address %d (page %d, offset %d): %v", address+i, pageIndex, offset, err)
 		}
 		result[i] = b
+		fmt.Printf("Read byte 0x%02x\n", b)
 	}
+	fmt.Printf("ReadMemory returning %d bytes: %v\n", len(result), result)
 	return result, nil
 }
-

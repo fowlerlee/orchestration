@@ -1,14 +1,14 @@
 package main
 
 import "fmt"
-import "virtualgomapping"
+import "github.com/fowlerlee/orchestration/virtualgomapping"
 
 
 func main() {
 	container := virtualgomapping.NewContainer()
 
 	// Allocate memory in the container
-	_, err := container.AllocateMemory(PageSize)
+	_, err := container.AllocateMemory(0)
 	if err != nil {
 		fmt.Println("Error allocating memory:", err)
 		return
