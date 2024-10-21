@@ -11,10 +11,13 @@ There exists a Client RPC Server that communicates with a Manager RPC Server, wh
 
 A simple XOR erasure code procedure is used to allow a failed Worker to recover its lost data upon start up and after failure. Since Reed-Solomon is not used, failure of several Workers will not allow recovery of all Worker data.
 
+The Worker uses a VirtualMemory via its cgo tooling. The Virtual Memory is made in Rust, then exposed via extern "C" functions in Rust. Note the implementation is unsafe, and its a Pointer to a u8 type. We have Rust tests for this, but its only way to make it happen.
+
 ## Goals:
 
 - Create Orchestrator Pattern - done
 - Implement XOR erasure codes for Workers on Managers and restore lost data - done
+- Rust to C to Go Virtual Memory implementation - done
 - Demonstrate Raft consensus between several managers - ongoing
 - Demonstrate Lock Service for Manager communicating with several Clients - ongoing
 - Demonstrate KVRaft algorithm for the Workers and their KVStore - ongoing
@@ -29,11 +32,19 @@ A simple XOR erasure code procedure is used to allow a failed Worker to recover 
 ### Testing custom Worker VirtualMemory
 
 ```
-    #rust
-    rustc --crate-type cdylib src/lib.rs -o libvirtual_memory.so
+    #rust linux | macOS=libvirtualmemory.dylib | windows=libvirtualmemory.dll
+    rustc --crate-type cdylib src/lib.rs -o libvirtualmemory.so
 
     #or
     cargo build --release
+
+    #go testing
+    cd virtualgomapping
+    go test
+
+    #if you get problems try
+    go clean cache
+    go test
 
     #go
     go build -o container

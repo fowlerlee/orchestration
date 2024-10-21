@@ -1,7 +1,7 @@
 package main
 
 import "fmt"
-import "github.com/fowlerlee/orchestration/virtualgomapping"
+import "virtualgomapping"
 
 
 func main() {
