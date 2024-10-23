@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -133,13 +134,9 @@ func (neon *NeonStore) DelecteAccount(firstname string) error {
 }
 
 func (neon *NeonStore) UpdateAccountForNumber(number int, update *Account) error {
-	query := `UPDATE account SET
-			first_name = $1,
-			last_name = $2,
-			encrypted_password = $3,
-			balance = $4
-		WHERE
-			number = $5`
+	query := `UPDATE account 
+		SET first_name = $1, last_name = $2, encrypted_password = $3, balance = $4
+		WHERE number = $5`
 
 	result, err := neon.db.Exec(query,
 		update.FirstName,
@@ -161,4 +158,50 @@ func (neon *NeonStore) UpdateAccountForNumber(number int, update *Account) error
 		return fmt.Errorf("no account found with number: %v", number)
 	}
 	return nil
+}
+
+func (neon *NeonStore) CreateIndexFor(columnName string) error {
+	query := fmt.Sprintf("CREATE INDEX IF NOT EXISTS idx_%s ON account (%s)", columnName, columnName)
+
+	_, err := neon.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("error creating index for column %s: %v", columnName, err)
+	}
+	return nil
+}
+
+type BalanceInfo struct {
+	Balance   int
+	FirstName string
+}
+
+func (neon *NeonStore) GetBalanceForUsersInXOrder(order string) ([]BalanceInfo, error) {
+	
+	orderUpper := strings.ToUpper(order)
+	if orderUpper != "ASC" && orderUpper != "DESC" {
+		return nil, fmt.Errorf("given order is not valid: %s", order)
+	}
+	
+	query := fmt.Sprintf("SELECT first_name, balance FROM account GROUP BY balance, first_name ORDER BY balance %s", orderUpper)
+	rows, err := neon.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("error querying accounts: %v", err)
+	}
+	defer rows.Close()
+
+	var balanceInfos []BalanceInfo
+	for rows.Next() {
+		var bi BalanceInfo
+		err := rows.Scan(&bi.FirstName, &bi.Balance)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning balance info row: %v", err)
+		}
+		balanceInfos = append(balanceInfos, bi)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating balance info rows: %v", err)
+	}
+
+	return balanceInfos, nil
 }

@@ -11,11 +11,11 @@ import (
 func main() {
 	w := worker.NewNeonStore()
 	acc := &worker.Account{
-		FirstName:         "James",
-		LastName:          "Kat",
-		Number:            223232,
-		EncryptedPassword: "dfgdfgdf",
-		Balance:           2000,
+		FirstName:         "Cate",
+		LastName:          "Becks",
+		Number:            345345,
+		EncryptedPassword: "dsdhrthsfgb",
+		Balance:           180,
 		CreatedAt:         time.Now(),
 	}
 	w.CreateAccount(acc)
@@ -23,11 +23,11 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	acc = &worker.Account{
-		FirstName:         "Luke",
-		LastName:          "Matick",
-		EncryptedPassword: "sdfsdsdsdfdf",
-		Number:            4346346346,
-		Balance:           1200,
+		FirstName:         "Pete",
+		LastName:          "Cooty",
+		EncryptedPassword: "dfgdfbdyfgn",
+		Number:            4654756,
+		Balance:           900,
 		CreatedAt:         time.Now(),
 	}
 	w.CreateAccount(acc)
@@ -41,14 +41,23 @@ func main() {
 	}
 	fmt.Printf("found account: %+v\n", account)
 
-	acc = &worker.Account{
-		FirstName:         "Jake",
-		LastName:          "Cupid",
-		EncryptedPassword: "hdfhdfhd",
-		Number:            34344543,
-		Balance:           500,
-		CreatedAt:         time.Now(),
+	// acc = &worker.Account{
+	// 	FirstName:         "Jake",
+	// 	LastName:          "Cupid",
+	// 	EncryptedPassword: "hdfhdfhd",
+	// 	Number:            34344543,
+	// 	Balance:           500,
+	// 	CreatedAt:         time.Now(),
+	// }
+
+	// w.UpdateAccountForNumber(123252, acc)
+
+	data, err := w.GetBalanceForUsersInXOrder("ASC")
+	if err != nil {
+		fmt.Printf("error occured getting the balances: %s", err)
 	}
 
-	w.UpdateAccountForNumber(123252, acc)
+	for _, val := range data {
+		fmt.Printf("Name: %s\t Balance: %d\n", val.FirstName, val.Balance)
+	}
 }
