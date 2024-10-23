@@ -105,7 +105,7 @@ func (neon *NeonStore) CreateAccount(acc *Account) error {
 	return nil
 }
 
-func (neon *NeonStore) GetAccountByName(number int) (*Account, error) {
+func (neon *NeonStore) GetAccountByNumber(number int) (*Account, error) {
 	var acc Account
 	query := "SELECT first_name, last_name, number, encrypted_password, balance, created_at FROM account where number = $1"
 	err := neon.db.QueryRow(query, number).Scan(
@@ -128,6 +128,37 @@ func (neon *NeonStore) GetAccountByName(number int) (*Account, error) {
 func (neon *NeonStore) DelecteAccount(firstname string) error {
 	if _, err := neon.db.Exec("DELETE FROM account where first_name = $1", firstname); err != nil {
 		return fmt.Errorf("failed to delete Account with first name %v", err)
+	}
+	return nil
+}
+
+func (neon *NeonStore) UpdateAccountForNumber(number int, update *Account) error {
+	query := `UPDATE account SET
+			first_name = $1,
+			last_name = $2,
+			encrypted_password = $3,
+			balance = $4
+		WHERE
+			number = $5`
+
+	result, err := neon.db.Exec(query,
+		update.FirstName,
+		update.LastName,
+		update.EncryptedPassword,
+		update.Balance,
+		number)
+
+	if err != nil {
+		return fmt.Errorf("failed to update account: %v", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %v", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no account found with number: %v", number)
 	}
 	return nil
 }
