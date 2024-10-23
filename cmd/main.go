@@ -1,33 +1,44 @@
 package main
 
-import "fmt"
-import "github.com/fowlerlee/orchestration/virtualgomapping"
+import (
+	// "fmt"
+	"fmt"
+	"log"
+	"time"
 
+	"github.com/fowlerlee/orchestration/worker"
+)
 
 func main() {
-	container := virtualgomapping.NewContainer()
+	w := worker.NewNeonStore()
+	acc := &worker.Account{
+		FirstName: "Lee",
+		LastName:  "Fowler",
+		Number:    123456,
+		EncryptedPassword: "hsoihsdfonsd",
+		Balance:   200,
+		CreatedAt: time.Now(),
+	}
+	w.CreateAccount(acc)
 
-	// Allocate memory in the container
-	_, err := container.AllocateMemory(0)
+	time.Sleep(1 * time.Second)
+
+	acc = &worker.Account{
+		FirstName: "Josefin",
+		LastName:  "Vestman",
+		EncryptedPassword: "cldhoshnsond",
+		Number:    54321,
+		Balance:   799,
+		CreatedAt: time.Now(),
+	}
+	w.CreateAccount(acc)
+
+	time.Sleep(1 * time.Second)
+
+	account, err := w.GetAccountByName(54321)
 	if err != nil {
-		fmt.Println("Error allocating memory:", err)
+		log.Printf("error getting account: %v", err)
 		return
 	}
-
-	// Write data to the allocated memory
-	data := []byte("Hello, virtualized memory!")
-	err = container.WriteMemory(0, data)
-	if err != nil {
-		fmt.Println("Error writing memory:", err)
-		return
-	}
-
-	// Read data from the allocated memory
-	readData, err := container.ReadMemory(0, uint(len(data)))
-	if err != nil {
-		fmt.Println("Error reading memory:", err)
-		return
-	}
-
-	fmt.Println(string(readData))
+	fmt.Printf("found account: %+v\n", account)
 }

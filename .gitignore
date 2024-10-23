@@ -9,4 +9,6 @@ orchestrator.out
 orchestrator.dvi
 orchestration
 
-virtualmem/target
+virtualmem/targetA
+
+/cmd/.env

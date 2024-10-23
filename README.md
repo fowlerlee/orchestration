@@ -51,4 +51,15 @@ The Worker uses a VirtualMemory via its cgo tooling. The Virtual Memory is made 
    ./container
 ```
 
+### NeonDB connection for the workers
+
+Please make sure you have a .env file for your db settings in the /cmd diretory.
+
+````
+# this will seed the db with dummy data where you can add your own
+cd cmd
+go run main.go
+
+````
+
 <h3 align="center" > <img src="./orchestration.png" width="700" height="600" style="center: 10px;"></h3
