@@ -6,6 +6,45 @@ import (
 	"github.com/fowlerlee/orchestration/common"
 )
 
+type LogEntry struct {
+	Index   int
+	Term    int
+	Command string
+}
+
+func (m *Manager) CheckForLeader() bool {
+	rpcMethod := "Manager.GetLeaderInfo"
+	for _, managerAddr := range m.OtherManagers {
+		args := &common.LeaderInfoArgs{
+			Term: m.Term,
+		}
+		reply := &common.LeaderInfoReply{}
+
+		ok := common.RpcCall(managerAddr, rpcMethod, args, reply)
+		if ok && reply.HasLeader {
+			m.LeaderAddress = reply.LeaderID
+			m.Term = reply.Term
+			m.State = Follower
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) GetLeaderInfo(args *common.LeaderInfoArgs, reply *common.LeaderInfoReply) error {
+	if m.State == Leader {
+		reply.HasLeader = true
+		reply.LeaderID = m.ID.String()
+	} else if m.LeaderAddress != "" {
+		reply.HasLeader = true
+		reply.LeaderID = m.LeaderAddress
+	} else {
+		reply.HasLeader = false
+	}
+	reply.Term = m.Term
+	return nil
+}
+
 func (m *Manager) StartLeaderElection() {
 	rpcMethod := "Manager.RequestVote"
 	m.State = Candidate

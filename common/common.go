@@ -112,6 +112,16 @@ type HeartbeatReply struct {
 	Term int
 }
 
+type LeaderInfoArgs struct {
+	Term int
+}
+
+type LeaderInfoReply struct {
+	HasLeader bool
+	LeaderID  string
+	Term      int
+}
+
 func (q *Queue) Enqueue(item string) {
 	q.lock.Lock()
 	defer q.lock.Lock()
