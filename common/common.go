@@ -81,9 +81,45 @@ type WorkerIPAddressResult struct {
 	WorkersIP []string
 }
 
+type RequestVoteArgs struct {
+	Term        int
+	CandidateID string
+}
+
+type RequestVoteReply struct {
+	VoteGranted bool
+	Term        int
+}
+
 type Queue struct {
 	Items []string
 	lock  sync.Mutex
+}
+
+type WorkerInfoArgs struct {
+}
+
+type WorkerInfoReply struct {
+	WorkersIPs []string
+}
+
+type HeartbeatArgs struct {
+	Term     int
+	LeaderID string
+}
+
+type HeartbeatReply struct {
+	Term int
+}
+
+type LeaderInfoArgs struct {
+	Term int
+}
+
+type LeaderInfoReply struct {
+	HasLeader bool
+	LeaderID  string
+	Term      int
 }
 
 func (q *Queue) Enqueue(item string) {

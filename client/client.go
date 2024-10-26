@@ -3,8 +3,10 @@ package client
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"net/rpc"
 	"os"
+	"sync"
 
 	"github.com/fowlerlee/orchestration/common"
 	uuid "github.com/google/uuid"
@@ -18,12 +20,14 @@ const (
 )
 
 type Client struct {
-	ID       uuid.UUID
-	address  string
-	Queue    common.Queue
-	shutdown chan struct{}
-	State    CState
-	l        net.Listener
+	ID         uuid.UUID
+	address    string
+	Queue      common.Queue
+	shutdown   chan struct{}
+	State      CState
+	l          net.Listener
+	httpServer *http.Server
+	wg         sync.WaitGroup
 }
 
 func MakeClient(address string) *Client {
@@ -33,6 +37,7 @@ func MakeClient(address string) *Client {
 	c.Queue = common.Queue{Items: make([]string, 0, 5)}
 	c.shutdown = make(chan struct{}, 1)
 	c.State = Idle
+	c.httpServer = &http.Server{Addr: ":8080"}
 	return c
 }
 
@@ -69,6 +74,8 @@ func (c *Client) StartClientRPC() {
 			fmt.Println("client successfully handled the RPC call")
 		}
 	}()
+
+	addHttpEndPointHandlers(c)
 }
 
 func (c *Client) AssignWorkToManager(address string,
@@ -104,6 +111,16 @@ func (c *Client) Shutdown(args *common.ClientShutdownArgs, reply *common.ClientS
 	c.shutdown <- struct{}{}
 	close(c.shutdown)
 	c.l.Close()
+	if err := c.httpServer.Close(); err != nil {
+		fmt.Printf("Error closing HTTP server: %v\n", err)
+	}
+
+	if err := c.l.Close(); err != nil {
+		return fmt.Errorf("error closing the rpc listener for client: %v", err)
+	}
+
+	// c.wg.Wait()
+
 	fmt.Println("client was stopped and cleaned up")
 	return nil
 }

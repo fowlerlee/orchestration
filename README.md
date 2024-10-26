@@ -28,6 +28,12 @@ The Worker uses a VirtualMemory via its cgo tooling. The Virtual Memory is made 
     go run main.go 8080 8081 8082 8083 8084
 
 ```
+### Debug and Test Manager Consensus
+
+````
+    dlv test ./manager -- -test.run=TestElectionAndFailure
+    
+````
 
 ### Testing custom Worker VirtualMemory
 
