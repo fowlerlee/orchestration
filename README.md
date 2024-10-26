@@ -21,5 +21,11 @@ There exists a Client RPC Server that communicates with a Manager RPC Server, wh
     go run main.go 8080 8081 8082 8083 8084
 
 ```
+### Debug and Test Manager Consensus
+
+````
+    dlv test ./manager -- -test.run=TestElectionAndFailure
+    
+````
 
 <h3 align="center" > <img src="./orchestration.png" width="700" height="600" style="center: 10px;"></h3
