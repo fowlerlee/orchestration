@@ -3,12 +3,17 @@
 bin
 
 /states
+/specs/states
 
 orchestrator.old
 orchestrator.out
 orchestrator.dvi
 orchestration
 
-virtualmem/targetA
+worker.out
+worker.old
+worker.dvi
+
+virtualmem/target
 
 /cmd/.env
