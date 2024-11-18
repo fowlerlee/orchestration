@@ -56,7 +56,7 @@ func (m *Manager) StartLeaderElection() {
 	sentLength := 0
 	ackedLength := 0
 
-	votesReceived.Add(m.address)
+	votesReceived.Add(m.ID.String())
 
 	for _, managerAddr := range m.OtherManagers {
 		args := &common.RequestVoteArgs{
