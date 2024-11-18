@@ -1,16 +1,14 @@
 package manager
 
 import (
+	"context"
+	"math/rand"
 	"time"
 
 	"github.com/fowlerlee/orchestration/common"
 )
 
-type LogEntry struct {
-	Index   int
-	Term    int
-	Command string
-}
+
 
 func (m *Manager) CheckForLeader() bool {
 	rpcMethod := "Manager.GetLeaderInfo"
@@ -72,7 +70,7 @@ func (m *Manager) StartLeaderElection() {
 }
 
 func (m *Manager) RequestVote(args *common.RequestVoteArgs, reply *common.RequestVoteReply) error {
-	if args.Term > m.Term {
+	if m.Term < args.Term {
 		m.Term = args.Term
 		m.State = Follower
 		m.LeaderAddress = ""
@@ -95,7 +93,7 @@ func (m *Manager) BecomeLeader() {
 	m.State = Leader
 	m.LeaderAddress = m.ID.String()
 	m.CollectWorkerInfo()
-	go m.SendHeartbeats()
+	go m.SendHeartbeats(context.Background())
 }
 
 func (m *Manager) CollectWorkerInfo() {
@@ -114,29 +112,49 @@ func (m *Manager) CollectWorkerInfo() {
 	m.Workers = allWorkers[string(m.ID.String())]
 }
 
-func (m *Manager) SendHeartbeats() {
+func (m *Manager) SendHeartbeats(c context.Context) {
 	rpcMethod := "Manager.ReceiveHeartbeat"
+	duration := time.Duration(rand.Intn(300))
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
 	for {
-		for _, managerAddr := range m.OtherManagers {
-			args := &common.HeartbeatArgs{
-				Term:     m.Term,
-				LeaderID: m.ID.String(),
-			}
-			reply := &common.HeartbeatReply{}
+		select {
+		case <-ticker.C:
+			for _, managerAddr := range m.OtherManagers {
+				go func(managerAddr string) {
+					args := &common.HeartbeatArgs{
+						Term:     m.Term,
+						LeaderID: m.ID.String(),
+					}
+					reply := &common.HeartbeatReply{}
 
-			common.RpcCall(managerAddr, rpcMethod, args, reply)
+					ok := common.RpcCall(managerAddr, rpcMethod, args, reply)
+					m.Lock()
+					defer m.Unlock()
+					if ok {
+						if m.Term > reply.Term {
+							// m has higher term so starts another election.
+							m.StartLeaderElection()
+						}
+					}
+				}(managerAddr)
+			}
+		case <-m.shutdown:
+			return
 		}
-		time.Sleep(time.Second)
 	}
 }
 
 func (m *Manager) ReceiveHeartbeat(args *common.HeartbeatArgs, reply *common.HeartbeatReply) error {
-	if args.Term >= m.Term {
-		m.Term = args.Term
+	m.Lock()
+	defer m.Unlock()
+	if m.Term <= args.Term {
 		m.State = Follower
+		m.Term = args.Term
 		m.LeaderAddress = args.LeaderID
 		m.LastHeartbeat = time.Now()
+	} else {
+		reply.Term = m.Term
 	}
-	reply.Term = m.Term
 	return nil
 }

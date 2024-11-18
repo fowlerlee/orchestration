@@ -10,6 +10,12 @@ const (
 	Protocol = "tcp"
 )
 
+type LogEntry struct {
+	Index   int
+	Term    int
+	Command string
+}
+
 type DoTaskArgs struct {
 	JobName    string
 	TaskNumber int

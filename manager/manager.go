@@ -24,11 +24,19 @@ const (
 
 type Manager struct {
 	sync.Mutex
+	// stable storage variables
+	Term         int
+	VotedFor     string
+	log          []common.LogEntry
+	CommitLength int
+	// volatile storage variables
+	State         ManagerElectionState
+	LeaderAddress string
+	VotesReceived common.Set[int]
+	SentLength    []int
+	AckLength     []int
 
-	State           ManagerElectionState
 	OtherManagers   []string
-	LeaderAddress    string
-	Term            int
 	LastHeartbeat   time.Time
 	address         string
 	doneChannel     chan bool
