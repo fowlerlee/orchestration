@@ -27,7 +27,7 @@ type Manager struct {
 	// stable storage variables
 	Term         int
 	VotedFor     string
-	log          []common.LogEntry
+	Log          []common.LogEntry
 	CommitLength int
 	// volatile storage variables
 	State         ManagerElectionState

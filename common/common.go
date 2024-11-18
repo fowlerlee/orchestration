@@ -88,8 +88,10 @@ type WorkerIPAddressResult struct {
 }
 
 type RequestVoteArgs struct {
-	Term        int
 	CandidateID string
+	CurrentTerm        int
+	LogLength int
+	LastTerm int
 }
 
 type RequestVoteReply struct {

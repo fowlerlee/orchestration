@@ -8,8 +8,6 @@ import (
 	"github.com/fowlerlee/orchestration/common"
 )
 
-
-
 func (m *Manager) CheckForLeader() bool {
 	rpcMethod := "Manager.GetLeaderInfo"
 	for _, managerAddr := range m.OtherManagers {
@@ -47,22 +45,38 @@ func (m *Manager) StartLeaderElection() {
 	rpcMethod := "Manager.RequestVote"
 	m.State = Candidate
 	m.Term++
-	votesReceived := 1
+	m.VotedFor = m.ID.String()
+	lastTerm := 0
+
+	if len(m.Log) > 0 {
+		lastTerm = m.Log[len(m.Log)-1].Term
+	}
+
+	votesReceived := common.NewSet[string]()
+	sentLength := 0
+	ackedLength := 0
+
+	votesReceived.Add(m.address)
 
 	for _, managerAddr := range m.OtherManagers {
 		args := &common.RequestVoteArgs{
-			Term:        m.Term,
 			CandidateID: m.ID.String(),
+			CurrentTerm: lastTerm,
+			LogLength:   len(m.Log),
+			LastTerm:    lastTerm,
 		}
 		reply := &common.RequestVoteReply{}
-
+		sentLength++
 		ok := common.RpcCall(managerAddr, rpcMethod, args, reply)
-		if ok && reply.VoteGranted {
-			votesReceived++
+		if ok {
+			ackedLength++
+			if reply.VoteGranted {
+				votesReceived.Add(args.CandidateID)
+			}
 		}
 	}
 
-	if votesReceived > len(m.OtherManagers)/2 {
+	if votesReceived.Size() > len(m.OtherManagers)/2 {
 		m.BecomeLeader()
 	} else {
 		m.State = Follower
@@ -70,13 +84,13 @@ func (m *Manager) StartLeaderElection() {
 }
 
 func (m *Manager) RequestVote(args *common.RequestVoteArgs, reply *common.RequestVoteReply) error {
-	if m.Term < args.Term {
-		m.Term = args.Term
+	if m.Term < args.CurrentTerm {
+		m.Term = args.CurrentTerm
 		m.State = Follower
 		m.LeaderAddress = ""
 	}
 
-	if m.Term > args.Term {
+	if m.Term > args.CurrentTerm {
 		reply.VoteGranted = false
 	} else if m.LeaderAddress == "" || m.LeaderAddress == args.CandidateID {
 		reply.VoteGranted = true

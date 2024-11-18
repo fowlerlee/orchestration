@@ -18,6 +18,30 @@ TypeInvarient ==
     /\ d \in <<1,2,3,4,5>>
     /\ r \subseteq r
 
+(*--algorithm worker
+VARIABLE ws = [Workers -> {"working", "idle", "replicate", "writing"}];
+VARIABLE d = <<1,2,3,4,5>>;
+VARIABLE r = <<>>;
+
+begin
+    while d # <<>> do
+        either
+            Calc:
+                if ws[self] = "idle" then
+                    r := Append(r, Head(d));
+                    d := Tail(d);
+                    ws' = [ws EXCEPT ![w] = "working"]:
+                end if;
+        or
+            XOR:
+                if ws[self] = "working" then
+                    ws' = [ws EXCEPT ![w]= "replicate"];
+
+                end if;
+        end either;
+    end while;;
+end algorithm; *)
+
 Init == 
     /\ ws = [wk \in Workers |-> "idle"]
     /\ d \in 1..5
