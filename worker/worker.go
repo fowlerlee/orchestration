@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/rpc"
@@ -201,6 +202,9 @@ func (w *Worker) RegisterWithManager(address string) error {
 }
 
 func (w *Worker) Shutdown(args *common.WorkerShutdownArgs, reply *common.WorkerShutdownReply) error {
+	w.Lock()
+	defer w.Unlock()
+
 	w.shutdown <- struct{}{}
 	close(w.shutdown)
 	w.l.Close()
@@ -217,8 +221,8 @@ type DockerResult struct {
 }
 
 func (wk *Worker) AssignWork(args *common.AssignWorkArgs, result *common.AssignWorkResults) error {
-	wk.Mutex.Lock()
-	defer wk.Mutex.Unlock()
+	wk.Lock()
+	defer wk.Unlock()
 	wk.DockerImage = args.ImageName
 	wk.ContainerCreate(wk.ctx)
 	result.WorkIsGiven = true
@@ -227,29 +231,59 @@ func (wk *Worker) AssignWork(args *common.AssignWorkArgs, result *common.AssignW
 }
 
 func (w *Worker) getListOfWorkersKVStores() []string {
-	w.Lock()
-	defer w.Unlock()
 	args := &common.WorkerIPAddressArgs{}
 	reply := &common.WorkerIPAddressResult{}
-	rpcName := "Master.GetListOfWorkersIP"
+	rpcName := "Manager.GetListOfWorkersIP"
 	ok := common.RpcCall(w.managerIP, rpcName, args, reply)
 	if !ok {
-		fmt.Println("failed to call the %v rpc method", rpcName)
+		fmt.Printf("failed to call the %v rpc method", rpcName)
 	}
 	w.AllWorkerAddresses = reply.WorkersIP
-	fmt.Print("GOT ALL WORKER ADDRESSES from MANAGER")
+	fmt.Println("GOT ALL WORKER ADDRESSES from MANAGER")
 	return w.AllWorkerAddresses
 }
 
 func (w *Worker) ReplicateKVStores() error {
+	w.Lock()
+	defer w.Unlock()
+
+	destinationFileName := w.Address
+	destinationFile, err := os.Create(destinationFileName)
+	if err != nil {
+		fmt.Println("Failed to created destination file for Worker")
+	}
+	defer destinationFile.Close()
+
 	workersKVStores := w.getListOfWorkersKVStores()
 	for k, v := range workersKVStores {
-		if v != w.storageFile {
-			file, err := os.OpenFile(v, os.O_RDWR, 0644)
+		if w.Address != v {
+			path := filepath.Join(os.TempDir(), fmt.Sprintf("worker_%s_store.json", v))
+			file, err := os.OpenFile(path, os.O_RDWR, 0644)
 			if err != nil {
 				return err
 			}
+			defer file.Close()
 			fmt.Printf("replicate worker %v KVStore by handling file: %v \n", k, file)
+			// 1 KB buffer
+			buffer := make([]byte, 1024)
+
+			for {
+				// read
+				n, err := file.Read(buffer)
+				if err != nil {
+					if err != io.EOF {
+						fmt.Println("Error reading file")
+					}
+					break
+				}
+
+				// write
+				_, err = destinationFile.Write(buffer[:n])
+				if err != nil {
+					fmt.Println("Error writing to the destination file")
+				}
+			}
+			fmt.Println("Reading and Writing completed for the data replication")
 		}
 	}
 	return nil

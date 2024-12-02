@@ -20,6 +20,7 @@ const (
 )
 
 type Client struct {
+	sync.Mutex
 	ID         uuid.UUID
 	address    string
 	Queue      common.Queue
@@ -108,6 +109,9 @@ func (client *Client) StopClientRPC() error {
 }
 
 func (c *Client) Shutdown(args *common.ClientShutdownArgs, reply *common.ClientShutdownReply) error {
+	c.Lock()
+	defer c.Unlock()
+
 	c.shutdown <- struct{}{}
 	close(c.shutdown)
 	c.l.Close()
