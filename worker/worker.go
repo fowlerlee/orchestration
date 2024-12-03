@@ -247,7 +247,7 @@ func (w *Worker) ReplicateKVStores() error {
 	w.Lock()
 	defer w.Unlock()
 
-	destinationFileName := w.Address
+	destinationFileName := filepath.Join(os.TempDir(), fmt.Sprintf("worker_%s_store.json", w.Address))
 	destinationFile, err := os.Create(destinationFileName)
 	if err != nil {
 		fmt.Println("Failed to created destination file for Worker")
