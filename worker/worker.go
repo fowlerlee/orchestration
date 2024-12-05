@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/rpc"
@@ -17,11 +16,12 @@ import (
 	"github.com/google/uuid"
 )
 
-type wState string
+type wState int
 
 const (
-	Waiting wState = "1"
-	Working wState = "2"
+	Unrecovered wState = iota + 1
+	Waiting
+	Recovered
 )
 
 // Config holds configuration for the worker node
@@ -53,7 +53,7 @@ type Worker struct {
 	l                  net.Listener
 	managerIP          string
 	shutdown           chan struct{}
-	kVStore            map[string]string
+	kVStore            map[string]interface{}
 	storageFile        string
 	EncodedData        [][]byte
 }
@@ -62,7 +62,7 @@ func CreateWorker(address string) (wk *Worker) {
 	wk = new(Worker)
 	wk.Channel = make(chan string)
 	wk.ID = uuid.New()
-	wk.State = Waiting
+	wk.State = Unrecovered
 	wk.Queue = common.Queue{Items: make([]string, 0, 5)}
 	wk.Address = address
 	wk.shutdown = make(chan struct{}, 1)
@@ -72,7 +72,7 @@ func CreateWorker(address string) (wk *Worker) {
 }
 
 func (w *Worker) initKVStore() {
-	w.kVStore = make(map[string]string)
+	w.kVStore = make(map[string]interface{})
 	tempDir := os.TempDir()
 	w.storageFile = filepath.Join(tempDir, fmt.Sprintf("worker_%s_store.json", w.Address))
 
@@ -82,11 +82,11 @@ func (w *Worker) initKVStore() {
 			recoverErr := w.RecoverDataFromManager()
 			if recoverErr != nil {
 				log.Printf("failed to recover data from manager: %v", recoverErr)
-				w.kVStore = map[string]string{}
+				w.kVStore = make(map[string]interface{})
 			}
 		} else {
 			log.Printf("error loading from file: %v", err)
-			w.kVStore = make(map[string]string)
+			w.kVStore = make(map[string]interface{})
 		}
 	}
 }
@@ -102,7 +102,7 @@ func (w *Worker) SetKV(key, value string) error {
 	return nil
 }
 
-func (w *Worker) GetKV(key string) (string, bool) {
+func (w *Worker) GetKV(key string) (any, bool) {
 	w.Lock()
 	defer w.Unlock()
 	value, exists := w.kVStore[key]
@@ -196,7 +196,7 @@ func (w *Worker) RegisterWithManager(address string) error {
 	rpcName := "Manager.Register"
 	ok := common.RpcCall(address, rpcName, args, reply)
 	if !ok {
-		return fmt.Errorf("failed to call %v rpc method\n", rpcName)
+		return fmt.Errorf("failed to call %v rpc method", rpcName)
 	}
 	return nil
 }
@@ -243,10 +243,19 @@ func (w *Worker) getListOfWorkersKVStores() []string {
 	return w.AllWorkerAddresses
 }
 
-func (w *Worker) ReplicateKVStores() error {
+func (w *Worker) RequestData(args *common.BackupDataArgs, reply *common.BackupDataReply) error {
 	w.Lock()
 	defer w.Unlock()
+	info, err := json.Marshal(w.kVStore)
+	if err != nil {
+		return fmt.Errorf("failed to marshall the kvStore data for the worker: %s", w.Address)
+	}
+	reply.EncodedData = info
+	reply.Success = true
+	return nil
+}
 
+func (w *Worker) ReplicateKVStores() error {
 	destinationFileName := filepath.Join(os.TempDir(), fmt.Sprintf("worker_%s_store.json", w.Address))
 	destinationFile, err := os.Create(destinationFileName)
 	if err != nil {
@@ -255,35 +264,34 @@ func (w *Worker) ReplicateKVStores() error {
 	defer destinationFile.Close()
 
 	workersKVStores := w.getListOfWorkersKVStores()
-	for k, v := range workersKVStores {
+	for _, v := range workersKVStores {
 		if w.Address != v {
-			path := filepath.Join(os.TempDir(), fmt.Sprintf("worker_%s_store.json", v))
-			file, err := os.OpenFile(path, os.O_RDWR, 0644)
+			// send msg to workers
+			rpcName := "Worker.RequestData"
+			args := &common.BackupDataArgs{}
+			reply := &common.BackupDataReply{}
+
+			ok := common.RpcCall(v, rpcName, args, reply)
+			if !ok {
+				return fmt.Errorf("failed to call the %v rpc method", rpcName)
+			}
+			// get back msg from workers
+			json.Unmarshal(reply.EncodedData, &w.kVStore)
+			// write data into this Workers KVstore
+			// !! FIXME: can delete the below !!
+			// path := filepath.Join(os.TempDir(), fmt.Sprintf("worker_%s_store.json", v))
+			// file, err := os.OpenFile(path, os.O_RDWR, 0644)
+			// if err != nil {
+			// 	return err
+			// }
+			// defer file.Close()
+			// fmt.Printf("replicate worker %v KVStore by handling file: %v \n", k, file)
+
+			// write
+			_, err = destinationFile.Write(reply.EncodedData)
 			if err != nil {
-				return err
+				fmt.Println("Error writing to the destination file")
 			}
-			defer file.Close()
-			fmt.Printf("replicate worker %v KVStore by handling file: %v \n", k, file)
-			// 1 KB buffer
-			buffer := make([]byte, 1024)
-
-			for {
-				// read
-				n, err := file.Read(buffer)
-				if err != nil {
-					if err != io.EOF {
-						fmt.Println("Error reading file")
-					}
-					break
-				}
-
-				// write
-				_, err = destinationFile.Write(buffer[:n])
-				if err != nil {
-					fmt.Println("Error writing to the destination file")
-				}
-			}
-			fmt.Println("Reading and Writing completed for the data replication")
 		}
 	}
 	return nil

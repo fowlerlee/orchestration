@@ -71,7 +71,7 @@ func (w *Worker) RecoverDataFromManager() error {
 		fmt.Println("failed to recover date from manager")
 	}
 
-	var recoveredData map[string]string
+	var recoveredData map[string]interface{}
 	err := json.Unmarshal(reply.EncodedData, &recoveredData)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal recovered data: %v", err)

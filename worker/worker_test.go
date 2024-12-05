@@ -10,22 +10,26 @@ import (
 
 func TestWorkerStartStop(t *testing.T) {
 	localhost := "localhost:"
+	// manager
 	addressManager := localhost + "8081"
 	m := manager.MakeManager(addressManager)
 	m.StartManagerRPC()
-
+	// worker 1
 	addressWorker1 := localhost + "8082"
-	addressWorker2 := localhost + "8083"
-	addressWorker3 := localhost + "8084"
 	w1 := CreateWorker(addressWorker1)
+	w1.StartWorkerRPC()
 	w1.RegisterWithManager(addressManager)
+	// worker 2
+	addressWorker2 := localhost + "8083"
 	w2 := CreateWorker(addressWorker2)
+	w2.StartWorkerRPC()
 	w2.RegisterWithManager(addressManager)
+	// worker 3
+	addressWorker3 := localhost + "8084"
 	w3 := CreateWorker(addressWorker3)
+	w3.StartWorkerRPC()
 	w3.RegisterWithManager(addressManager)
 
-	w1.initKVStore()
-	w2.initKVStore()
 	w1.SetKV("1", "lee")
 	w1.saveToFile()
 	w2.SetKV("2", "Jack")
@@ -34,8 +38,7 @@ func TestWorkerStartStop(t *testing.T) {
 	// test workers: w1 and w3
 	w3.ReplicateKVStores()
 	val, ok := w1.GetKV("1")
-	w3.loadFromFile()
-	result, okResult := w3.GetKV("1") // FIXME: error in reading from file for worker 8084, both vals in file exist=true
+	result, okResult := w3.GetKV("1")
 	if !ok && !okResult {
 		log.Fatalf("failed to get the value")
 	}
@@ -45,7 +48,7 @@ func TestWorkerStartStop(t *testing.T) {
 
 	// test workers: w2 and w3
 	val, ok = w2.GetKV("2")
-	result, okResult = w3.GetKV("2") 
+	result, okResult = w3.GetKV("2")
 	if !ok && !okResult {
 		log.Fatalf("failed to get the value")
 	}
@@ -53,10 +56,7 @@ func TestWorkerStartStop(t *testing.T) {
 		log.Fatalf("Failed to replicate data")
 	}
 
-
 	// shutdown registered workers and self
 	m.StopManagerRPC()
-
-
 
 }
