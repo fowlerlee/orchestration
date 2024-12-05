@@ -17,17 +17,14 @@ func TestWorkerStartStop(t *testing.T) {
 	// worker 1
 	addressWorker1 := localhost + "8082"
 	w1 := CreateWorker(addressWorker1)
-	w1.StartWorkerRPC()
 	w1.RegisterWithManager(addressManager)
 	// worker 2
 	addressWorker2 := localhost + "8083"
 	w2 := CreateWorker(addressWorker2)
-	w2.StartWorkerRPC()
 	w2.RegisterWithManager(addressManager)
 	// worker 3
 	addressWorker3 := localhost + "8084"
 	w3 := CreateWorker(addressWorker3)
-	w3.StartWorkerRPC()
 	w3.RegisterWithManager(addressManager)
 
 	w1.SetKV("1", "lee")
@@ -35,6 +32,7 @@ func TestWorkerStartStop(t *testing.T) {
 	w2.SetKV("2", "Jack")
 	w2.saveToFile()
 
+	w3.ReplicateKVStores()
 	// test workers: w1 and w3
 	val, ok := w1.GetKV("1")
 	result, okResult := w3.GetKV("1")

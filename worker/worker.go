@@ -68,6 +68,7 @@ func CreateWorker(address string) (wk *Worker) {
 	wk.shutdown = make(chan struct{}, 1)
 	wk.initKVStore()
 	wk.loadFromFile()
+	wk.StartWorkerRPC()
 	return
 }
 
