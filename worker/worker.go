@@ -275,19 +275,9 @@ func (w *Worker) ReplicateKVStores() error {
 			if !ok {
 				return fmt.Errorf("failed to call the %v rpc method", rpcName)
 			}
-			// get back msg from workers
+			// copy data into worker volatile memory
 			json.Unmarshal(reply.EncodedData, &w.kVStore)
-			// write data into this Workers KVstore
-			// !! FIXME: can delete the below !!
-			// path := filepath.Join(os.TempDir(), fmt.Sprintf("worker_%s_store.json", v))
-			// file, err := os.OpenFile(path, os.O_RDWR, 0644)
-			// if err != nil {
-			// 	return err
-			// }
-			// defer file.Close()
-			// fmt.Printf("replicate worker %v KVStore by handling file: %v \n", k, file)
-
-			// write
+			// write to worker stable storage
 			_, err = destinationFile.Write(reply.EncodedData)
 			if err != nil {
 				fmt.Println("Error writing to the destination file")

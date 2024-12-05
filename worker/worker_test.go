@@ -36,7 +36,6 @@ func TestWorkerStartStop(t *testing.T) {
 	w2.saveToFile()
 
 	// test workers: w1 and w3
-	w3.ReplicateKVStores()
 	val, ok := w1.GetKV("1")
 	result, okResult := w3.GetKV("1")
 	if !ok && !okResult {
