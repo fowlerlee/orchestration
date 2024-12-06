@@ -13,7 +13,6 @@ func TestWorkerStartStop(t *testing.T) {
 	// manager
 	addressManager := localhost + "8081"
 	m := manager.MakeManager(addressManager)
-	m.StartManagerRPC()
 	// worker 1
 	addressWorker1 := localhost + "8082"
 	w1 := CreateWorker(addressWorker1)

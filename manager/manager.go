@@ -61,6 +61,7 @@ func MakeManager(address string) *Manager {
 	m.State = Follower
 	m.shutdown = make(chan struct{}, 1)
 	m.WorkerBackups = map[string][][]byte{}
+	m.StartManagerRPC()
 	return m
 }
 
