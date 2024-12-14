@@ -59,19 +59,34 @@ func MakeManager(address string) *Manager {
 	m := new(Manager)
 	m.address = address
 	m.ID = uuid.New()
+
 	m.Term = 0
 	m.VotedFor = ""
 	m.Log = []common.LogEntry{}
+	m.CommitLength = 0
+	m.State = Follower
+	m.VotesReceived = common.NewSet[string]()
+
 	m.Queue = common.Queue{Items: make([]string, 5)}
 	m.RegisterChannel = make(chan string)
 	m.Workers = make([]string, 0, 5)
 	m.WorkerTaskMap = make(map[string][]uuid.UUID)
-	m.State = Follower
 	m.shutdown = make(chan struct{}, 1)
 	m.WorkerBackups = map[string][][]byte{}
-	m.VotesReceived = common.NewSet[string]()
 	m.StartManagerRPC()
 	return m
+}
+
+func (m *Manager) RecoverDataForManager() error {
+	m.Lock()
+	defer m.Unlock()
+	m.State = Follower
+	m.LeaderAddress = ""
+	m.VotesReceived = &common.Set[string]{}
+	m.SentLength = []int{}
+	m.AckLength = []int{}
+	
+	return nil
 }
 
 func (m *Manager) Register(args *common.RegisterArgs, reply *common.RegisterResult) error {
