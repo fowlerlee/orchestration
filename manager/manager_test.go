@@ -16,10 +16,6 @@ func TestElectionAndFailure(t *testing.T) {
 	m1.OtherManagers = setManagers
 	m2.OtherManagers = setManagers
 	m3.OtherManagers = setManagers
-	m0.StartManagerRPC()
-	m1.StartManagerRPC()
-	m2.StartManagerRPC()
-	m3.StartManagerRPC()
 
 	m0.StartLeaderElection()
 	if m0.CheckForLeader() {

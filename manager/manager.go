@@ -1,5 +1,9 @@
 package manager
 
+// the Manager is designed according to the specification of D. Ongaro et al.
+// Where appropriate the spec steps are copied over into the individual steps
+// to make sure it is clear which acction is taking place.
+
 import (
 	"encoding/json"
 	"fmt"
@@ -25,6 +29,7 @@ const (
 type Manager struct {
 	sync.Mutex
 	// stable storage variables
+	// Term is the currentTerm for this node
 	Term         int
 	VotedFor     string
 	Log          []common.LogEntry
@@ -32,7 +37,7 @@ type Manager struct {
 	// volatile storage variables
 	State         ManagerElectionState
 	LeaderAddress string
-	VotesReceived common.Set[int]
+	VotesReceived *common.Set[string]
 	SentLength    []int
 	AckLength     []int
 
@@ -54,6 +59,9 @@ func MakeManager(address string) *Manager {
 	m := new(Manager)
 	m.address = address
 	m.ID = uuid.New()
+	m.Term = 0
+	m.VotedFor = ""
+	m.Log = []common.LogEntry{}
 	m.Queue = common.Queue{Items: make([]string, 5)}
 	m.RegisterChannel = make(chan string)
 	m.Workers = make([]string, 0, 5)
@@ -61,6 +69,7 @@ func MakeManager(address string) *Manager {
 	m.State = Follower
 	m.shutdown = make(chan struct{}, 1)
 	m.WorkerBackups = map[string][][]byte{}
+	m.VotesReceived = common.NewSet[string]()
 	m.StartManagerRPC()
 	return m
 }

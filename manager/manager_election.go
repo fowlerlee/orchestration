@@ -44,8 +44,9 @@ func (m *Manager) GetLeaderInfo(args *common.LeaderInfoArgs, reply *common.Leade
 func (m *Manager) StartLeaderElection() {
 	rpcMethod := "Manager.RequestVote"
 	m.State = Candidate
-	m.Term++
+	m.Term += 1
 	m.VotedFor = m.ID.String()
+	m.VotesReceived.Add(m.ID.String())
 	lastTerm := 0
 
 	if len(m.Log) > 0 {
@@ -59,19 +60,21 @@ func (m *Manager) StartLeaderElection() {
 	votesReceived.Add(m.ID.String())
 
 	for _, managerAddr := range m.OtherManagers {
-		args := &common.RequestVoteArgs{
-			CandidateID: m.ID.String(),
-			CurrentTerm: lastTerm,
-			LogLength:   len(m.Log),
-			LastTerm:    lastTerm,
-		}
-		reply := &common.RequestVoteReply{}
-		sentLength++
-		ok := common.RpcCall(managerAddr, rpcMethod, args, reply)
-		if ok {
-			ackedLength++
-			if reply.VoteGranted {
-				votesReceived.Add(args.CandidateID)
+		if m.address != managerAddr {
+			args := &common.RequestVoteArgs{
+				CandidateID: m.ID.String(),
+				CurrentTerm: m.Term,
+				LogLength:   len(m.Log),
+				LastTerm:    lastTerm,
+			}
+			reply := &common.RequestVoteReply{}
+			sentLength++
+			ok := common.RpcCall(managerAddr, rpcMethod, args, reply)
+			if ok {
+				ackedLength++
+				if reply.VoteGranted {
+					votesReceived.Add(args.CandidateID)
+				}
 			}
 		}
 	}
@@ -88,6 +91,7 @@ func (m *Manager) RequestVote(args *common.RequestVoteArgs, reply *common.Reques
 		m.Term = args.CurrentTerm
 		m.State = Follower
 		m.LeaderAddress = ""
+		m.VotedFor = ""
 	}
 
 	if m.Term > args.CurrentTerm {
@@ -162,13 +166,23 @@ func (m *Manager) SendHeartbeats(c context.Context) {
 func (m *Manager) ReceiveHeartbeat(args *common.HeartbeatArgs, reply *common.HeartbeatReply) error {
 	m.Lock()
 	defer m.Unlock()
-	if m.Term <= args.Term {
-		m.State = Follower
-		m.Term = args.Term
-		m.LeaderAddress = args.LeaderID
-		m.LastHeartbeat = time.Now()
-	} else {
-		reply.Term = m.Term
+	// FIXME 2 -> if has not received a heartbeat for 500 ms then start LeaderElection
+	ticker := time.NewTicker(time.Duration(500 - (200 * (rand.Int() % 1000) / 1000)))
+
+	for {
+		select {
+		case <-ticker.C:
+			m.StartLeaderElection()
+		default:
+			if m.Term <= args.Term {
+				m.State = Follower
+				m.Term = args.Term
+				m.LeaderAddress = args.LeaderID
+				m.LastHeartbeat = time.Now()
+			} else {
+				reply.Term = m.Term
+			}
+			ticker = nil
+		}
 	}
-	return nil
 }
