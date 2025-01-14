@@ -110,6 +110,8 @@ var LOG_TABLE = []int16{
 	116, 214, 244, 234, 168, 80, 88, 175,
 }
 
+// var MULTIPLICATION_TABLE = GenerateMultiplicationTable()
+
 type Galois struct {
 }
 
@@ -167,4 +169,23 @@ func (galois *Galois) generateLogTable(polynomial int) ([]int16, error) {
 	}
 
 	return result, nil
+}
+
+
+func (galois *Galois) GenerateMultiplicationTable() [][]int8 {
+	result := make([][]int8, 256)
+	
+    // Allocate each inner slice with length 256
+    for i := range result {
+        result[i] = make([]int8, 256)
+    }
+
+	g := CreateGalois()
+	for a := 0; a < FIELD_SIZE; a++ {
+		for b := 0; b < FIELD_SIZE; b++ {
+			result[a][b] = g.multiply(int8(a), int8(b))
+		}
+	}
+
+	return result
 }

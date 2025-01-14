@@ -81,3 +81,16 @@ func TestGenerateLogTable(t *testing.T) {
 	}
 	reflect.DeepEqual(LOG_TABLE, logTable)
 }
+
+func TestGenerateMultiplicationTable(t *testing.T) {
+	g := CreateGalois()
+
+	table := g.GenerateMultiplicationTable()
+
+	for a := -128; a < 128; a++ {
+		for b := -128; b < 128; b++ {
+			assert.Equal(t, g.multiply(int8(a), int8(b)), table[a & 0xFF][b & 0xFF])
+		}
+	}
+
+}
