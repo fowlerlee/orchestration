@@ -106,7 +106,7 @@ var LOG_TABLE = []int16{
 type Galois struct {
 }
 
-func CreateGalois() *Galois{
+func CreateGalois() *Galois {
 	return &Galois{}
 }
 
@@ -123,4 +123,23 @@ func (galois *Galois) multiply(a int8, b int8) int8 {
 		logResult := logA + logB
 		return int8(EXP_TABLE[logResult])
 	}
+}
+
+func (galois *Galois) exp(a int8, expon int) int8 {
+	if expon == 0 {
+		return 1
+	} else if a == 0 {
+		return 0
+	} else {
+		logA := LOG_TABLE[uint8(a)&uint8(0xFF)]
+		logResult := uint16(logA) * uint16(expon)
+		for 255 <= logResult {
+			logResult -= 255
+		}
+		return EXP_TABLE[logResult]
+	}
+}
+
+func GenerateLogTable(poly int) []int16 {
+	return []int16{1, 2}
 }

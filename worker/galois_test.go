@@ -1,8 +1,8 @@
 package worker
 
 import (
-	
 	"testing"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -42,4 +42,31 @@ func TestGaloisCommutative(t *testing.T) {
 	}
 }
 
+func TestDistributivity(t *testing.T) {
+	g := CreateGalois()
+	for i := -128; i < 128; i++ {
+		a := int8(i)
+		for j := -128; j < 128; j++ {
+			b := int8(j)
+			for k := 0; k < 128; k++ {
+				c := int8(k)
+				assert.Equal(t, g.multiply(a, g.add(b, c)),
+					g.add(g.multiply(a, b), g.multiply(a, c)),
+				)
+			}
+		}
+	}
+}
 
+func TestExponent(t *testing.T) {
+	g := CreateGalois()
+	for i := -128; i < 128; i++ {
+		a:= int8(i)
+		power := int8(1)
+
+		for j := 0; j < 256; j++ {
+			assert.Equal(t, power, g.exp(a, j))
+			power = g.multiply(power, a)
+		}
+	}
+}
