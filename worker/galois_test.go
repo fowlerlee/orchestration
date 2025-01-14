@@ -1,6 +1,8 @@
 package worker
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -69,4 +71,13 @@ func TestExponent(t *testing.T) {
 			power = g.multiply(power, a)
 		}
 	}
+}
+
+func TestGenerateLogTable(t *testing.T) {
+	g := CreateGalois()
+	logTable, err := g.generateLogTable(GENERATING_POLYNOMIAL)
+	if err != nil {
+		fmt.Printf("Error occurred in generateLogTable: %v", err)
+	}
+	reflect.DeepEqual(LOG_TABLE, logTable)
 }

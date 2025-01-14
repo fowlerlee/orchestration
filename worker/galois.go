@@ -1,5 +1,9 @@
 package worker
 
+import (
+	"fmt"
+)
+
 var EXP_TABLE = []int8{
 	1, 2, 4, 8, 16, 32, 64, -128,
 	29, 58, 116, -24, -51, -121, 19, 38,
@@ -67,6 +71,9 @@ var EXP_TABLE = []int8{
 	-9, -13, -5, -21, -53, -117, 11, 22,
 	44, 88, -80, 125, -6, -23, -49, -125,
 	27, 54, 108, -40, -83, 71, -114}
+
+const GENERATING_POLYNOMIAL = 29
+const FIELD_SIZE = 256
 
 var LOG_TABLE = []int16{
 	-1, 0, 1, 25, 2, 50, 26, 198,
@@ -140,6 +147,24 @@ func (galois *Galois) exp(a int8, expon int) int8 {
 	}
 }
 
-func GenerateLogTable(poly int) []int16 {
-	return []int16{1, 2}
+func (galois *Galois) generateLogTable(polynomial int) ([]int16, error) {
+
+	result := make([]int16, FIELD_SIZE)
+	for i := 0; i < FIELD_SIZE; i++ {
+		result[i] = -1 //mean not set, so perhaps debug
+	}
+
+	b := 1
+	for log := 0; log < FIELD_SIZE-1; log++ {
+		if result[b] != -1 {
+			return nil, fmt.Errorf("BUG: duplicate logarithm (bad polynomial?)")
+		}
+		result[b] = int16(log)  // problems?
+		b = (b << 1)
+		if FIELD_SIZE <= b {
+			b = (b - FIELD_SIZE) ^ polynomial
+		}
+	}
+
+	return result, nil
 }
