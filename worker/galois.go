@@ -106,6 +106,14 @@ var LOG_TABLE = []int16{
 type Galois struct {
 }
 
+func CreateGalois() *Galois{
+	return &Galois{}
+}
+
+func (galois *Galois) Add(a int8, b int8) int8 {
+	return int8(a ^ b)
+}
+
 func (galois *Galois) multiply(a int8, b int8) int8 {
 	if a == 0 || b == 0 {
 		return 0
