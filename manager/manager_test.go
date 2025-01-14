@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"fmt"
 	"testing"
 )
@@ -37,4 +38,35 @@ func TestElectionAndFailure(t *testing.T) {
 	m1.StopManagerRPC()
 	m2.StopManagerRPC()
 	m3.StopManagerRPC()
+}
+
+
+// there are bugs in this test, as we debug in one node they other
+// nodes in different address spaces send many messages, try fewer msgs
+func TestLeaderRecovery(t *testing.T) {
+	l := "localhost:"
+	setManagers := []string{l + "8080", l + "8081", l + "8082", l + "8083", l + "8084"}
+	m0 := MakeManager(setManagers[0])
+	m1 := MakeManager(setManagers[1])
+	m2 := MakeManager(setManagers[2])
+	m3 := MakeManager(setManagers[3])
+	group := []*Manager{m0, m1, m2, m3}
+	for _, v1 := range group {
+		for _, v2 := range setManagers {
+			if v1.address != v2 {
+				v1.OtherManagers = append(v1.OtherManagers, v2)
+			}
+		}
+	}
+
+	m0.SendHeartbeats(context.Background())
+	m1.SendHeartbeats(context.Background())
+	m2.SendHeartbeats(context.Background())
+	m3.SendHeartbeats(context.Background())
+
+	if m0.CheckForLeader() || m1.CheckForLeader() || m2.CheckForLeader() || m3.CheckForLeader() {
+		fmt.Println("Leader exists")
+
+	}
+
 }

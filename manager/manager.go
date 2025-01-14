@@ -67,6 +67,7 @@ func MakeManager(address string) *Manager {
 	m.State = Follower
 	m.VotesReceived = common.NewSet[string]()
 
+	m.OtherManagers = make([]string, 0)
 	m.Queue = common.Queue{Items: make([]string, 5)}
 	m.RegisterChannel = make(chan string)
 	m.Workers = make([]string, 0, 5)
@@ -85,7 +86,7 @@ func (m *Manager) RecoverDataForManager() error {
 	m.VotesReceived = &common.Set[string]{}
 	m.SentLength = []int{}
 	m.AckLength = []int{}
-	
+
 	return nil
 }
 

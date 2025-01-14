@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"log"
 	"math/rand"
 	"time"
 
@@ -132,12 +133,14 @@ func (m *Manager) CollectWorkerInfo() {
 
 func (m *Manager) SendHeartbeats(c context.Context) {
 	rpcMethod := "Manager.ReceiveHeartbeat"
-	duration := time.Duration(rand.Intn(300))
-	ticker := time.NewTicker(duration)
+	min := 1
+	max := 5
+	ticker := time.NewTicker(time.Duration(rand.Intn(max-min)+min) * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
+			log.Printf("tick send from manager: %s", m.address)
 			for _, managerAddr := range m.OtherManagers {
 				go func(managerAddr string) {
 					args := &common.HeartbeatArgs{
@@ -167,7 +170,8 @@ func (m *Manager) ReceiveHeartbeat(args *common.HeartbeatArgs, reply *common.Hea
 	m.Lock()
 	defer m.Unlock()
 	// FIXME 2 -> if has not received a heartbeat for 500 ms then start LeaderElection
-	ticker := time.NewTicker(time.Duration(500 - (200 * (rand.Int() % 1000) / 1000)))
+	// ticker := time.NewTicker(time.Duration(500 - (200 * (rand.Int() % 1000) / 1000)))
+	ticker := time.NewTicker(time.Duration(500))
 
 	for {
 		select {
