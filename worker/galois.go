@@ -110,7 +110,7 @@ func CreateGalois() *Galois{
 	return &Galois{}
 }
 
-func (galois *Galois) Add(a int8, b int8) int8 {
+func (galois *Galois) add(a int8, b int8) int8 {
 	return int8(a ^ b)
 }
 
