@@ -18,9 +18,12 @@ The Worker uses a VirtualMemory via its cgo tooling. The Virtual Memory is made 
 - Create Orchestrator Pattern - done
 - Implement XOR erasure codes for Workers on Managers and restore lost data - done
 - Rust to C to Go Virtual Memory implementation - done
+- Reed-Solomon erasure codes implementation - ongoing 
 - Demonstrate Raft consensus between several managers - ongoing
 - Demonstrate Lock Service for Manager communicating with several Clients - ongoing
 - Demonstrate KVRaft algorithm for the Workers and their KVStore - ongoing
+
+Note: Reed-Solomon implementation is inspired and ported from the OSS implementation by BackBlaze -> https://www.backblaze.com/blog/reed-solomon/ . The implementation is in Java and can be viewed at https://github.com/Backblaze/JavaReedSolomon
 
 ### Run integration test with cleanup
 
