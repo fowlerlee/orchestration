@@ -17,3 +17,6 @@ worker.dvi
 virtualmem/target
 
 /cmd/.env
+
+# GeeqoDB directory to run the db on the nodes
+geeqodb/

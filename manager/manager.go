@@ -55,11 +55,23 @@ type Manager struct {
 	WorkerBackups   map[string][][]byte
 }
 
+// Init == /\ log = [n \in Nodes |-> {}]
+//         /\ durabilitylog = [n \in Nodes |-> {}]
+//         /\ durabilityCommitIndex = [n \in Nodes |-> 0]
+//         /\ commitIndex = [n \in Nodes |-> 0]
+//         /\ appliedIndex = [n \in Nodes |-> 0]
+//         /\ nextIndex = [n \in Nodes |-> [f \in Followers |-> 1]]
+//         /\ matchIndex = [n \in Nodes |-> [f \in Followers |-> 0]]
+//         /\ currentTerm = [n \in Nodes |-> 0]
+//         /\ votedFor = [n \in Nodes |-> NULL]
+//         /\ state = [n \in Nodes |-> IF n = Leader THEN "leader" ELSE "follower"]
+//         /\ clientRequests = {}
+//         /\ clientResponses = {}
 func MakeManager(address string) *Manager {
 	m := new(Manager)
 	m.address = address
 	m.ID = uuid.New()
-
+	m.durabilitylog = make(map[string][]common.LogEntry)
 	m.Term = 0
 	m.VotedFor = ""
 	m.Log = []common.LogEntry{}
