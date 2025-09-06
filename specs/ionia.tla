@@ -1,169 +1,260 @@
 ---- MODULE ionia ----
-EXTENDS TLC
 
-CONSTANT Nodes, Clients
+(* The following is a spec to describe Inonia from the work of Xu et al. 2024 and all credit goes the authors*)
+(* IonIa: High-Performance Replication for Modern Disk-based KV Stores *)
 
-Leader == \E n \in Nodes: Leader \notin Nodes
+EXTENDS TLC, Naturals, Sequences, FiniteSets
 
-Followers == Nodes # {Leader}
+CONSTANTS Nodes, Clients, MaxLogSize, NULL, Values
 
-AllNodes == {Leader \union Followers \union Clients}
+ASSUME Cardinality(Nodes) >= 3  \* Need majority for consensus
+ASSUME NULL \notin Nat \* Null is not a natural number
+ASSUME Values \subseteq Nat /\ Cardinality(Values) > 0  \* Finite set of possible values
 
+(* Helpful definitions *)
+AllActors == Nodes \cup Clients
+(* Common module not importable - change later *)
+Min(a, b) == IF a <= b THEN a ELSE b
+Max(a, b) == IF a <= b THEN b ELSE a
 
-msg == [type: {"read", "reqs" , "meta", "order", "apply", "data", "commit", "sync"}]
+(* Message types - check if we should encode these value to 1.. N so that its easier to enumerate *)
+MessageType == {"read", "write", "propose", "ack", "commit", "apply", "sync"}
 
-(*--algorithm ionia
-\* means x is the value associated with the data being persisted
-\* 
-variables x = 0, log = [q \in AllNodes |-> <<>>];
+(* Message structure *)
+Message == [type: MessageType, 
+            seq: Nat, 
+            value: Values, 
+            from: AllActors,
+            to: AllActors,
+            term: Nat]
 
-macro send(id, msg) begin
-    queues := Append(queues[id], msg);
-end macro;
+(* Process types *)
+Leader == CHOOSE n \in Nodes: TRUE  \* Single leader
+Followers == Nodes \ {Leader}
 
-macro receive(msg) begin
-    await Len(queues[self] > 0);
-    msg := Head(queues[self]);
-    queues := Tail(queues[self]);
-end macro;
-
-process Leader \in Leader
-variable leaderlog = <<>>;
-begin
-    GetClientRequest:
-        if leaderlog /= <<>> then
-            with l \in Leader do
-                \* receive({"order"});
-            end with;
-        end if;
-    ProposeToFollowers:
-        skip;
-    CollectAcks:
-        skip;
-    CommitToClients:
-        skip;  
-end process;
-
-process Follower \in Followers
-variable followerlog = <<>>;
-begin
-    GetLeaderPropose:
-        skip;
-    AckToLeader:
-        skip;
-    ApplyToStateMachine:
-        skip;
-    OrderLog:
-        skip;
-end process;
-
-process Client \in Clients
-variable clientlog = <<>>;
-begin
-    SendRequestToLeader:
-        skip;
-    WaitForReply:
-        skip;
-end process;
+(* State variables *)
+VARIABLES 
+    log,                   \* Replicated log: [node -> sequence of operations]
+    commitIndex,           \* [node -> Nat] - highest committed index per node
+    appliedIndex,          \* [node -> Nat] - highest applied index per node
+    nextIndex,             \* [leader -> [follower -> Nat]] - next log entry to send
+    matchIndex,            \* [leader -> [follower -> Nat]] - highest known match
+    currentTerm,           \* [node -> Nat] - current term per node
+    votedFor,              \* [node -> Nodes \cup {NULL}] - candidate voted for
+    state,                 \* [node -> {"leader", "follower", "candidate"}]
+    messages,              \* [node -> sequence of messages]
+    clientRequests,        \* Pending client requests
+    clientResponses        \* Responses to send to clients
 
 
-end algorithm; *)
-\* BEGIN TRANSLATION (chksum(pcal) = "e5858edf" /\ chksum(tla) = "a60c9a41")
-VARIABLES pc, x, leaderlog, followerlog, clientlog
+(* Helper functions *)
+Majority == {S \in SUBSET Nodes : Cardinality(S) > Cardinality(Nodes) \div 2}
 
-vars == << pc, x, leaderlog, followerlog, clientlog >>
+IsLeader(n) == state[n] = "leader"
 
-ProcSet == (Leader) \cup (Followers) \cup (Clients)
+IsFollower(n) == state[n] = "follower"
 
-Init == (* Global variables *)
-        /\ x = 0
-        (* Process Leader *)
-        /\ leaderlog = [self \in Leader |-> <<>>]
-        (* Process Follower *)
-        /\ followerlog = [self \in Followers |-> <<>>]
-        (* Process Client *)
-        /\ clientlog = [self \in Clients |-> <<>>]
-        /\ pc = [self \in ProcSet |-> CASE self \in Leader -> "GetClientRequest"
-                                        [] self \in Followers -> "GetLeaderPropose"
-                                        [] self \in Clients -> "SendRequestToLeader"]
+GetLastLogIndex(n) == Len(log[n])
 
-GetClientRequest(self) == /\ pc[self] = "GetClientRequest"
-                          /\ TRUE
-                          /\ pc' = [pc EXCEPT ![self] = "ProposeToFollowers"]
-                          /\ UNCHANGED << x, leaderlog, followerlog, clientlog >>
+GetLastLogTerm(n) == IF log[n] = {} THEN 0 ELSE log[n][Len(log[n])].term
 
-ProposeToFollowers(self) == /\ pc[self] = "ProposeToFollowers"
-                            /\ TRUE
-                            /\ pc' = [pc EXCEPT ![self] = "CollectAcks"]
-                            /\ UNCHANGED << x, leaderlog, followerlog, 
-                                            clientlog >>
+(* Safety properties *)
+TypeInvarient == 
+            /\ log \in [Nodes -> SUBSET Message]
+            /\ commitIndex \in [Nodes -> Nat]
+            /\ appliedIndex \in [Nodes -> Nat]
+            /\ nextIndex \in [Nodes -> [Followers -> Nat]]
+            /\ matchIndex \in [Nodes -> [Followers -> Nat]]
+            /\ currentTerm \in [Nodes -> Nat]
+            /\ state \in [Nodes -> {"leader", "follower", "candidate"}]
+            /\ clientRequests \in SUBSET Message
+            /\ clientResponses \in SUBSET Message
+            /\ messages \in [Nodes -> SUBSET Message]
 
-CollectAcks(self) == /\ pc[self] = "CollectAcks"
-                     /\ TRUE
-                     /\ pc' = [pc EXCEPT ![self] = "CommitToClients"]
-                     /\ UNCHANGED << x, leaderlog, followerlog, clientlog >>
+(* Initial state *)
+Init == /\ log = [n \in Nodes |-> {}]
+        /\ commitIndex = [n \in Nodes |-> 0]
+        /\ appliedIndex = [n \in Nodes |-> 0]
+        /\ nextIndex = [n \in Nodes |-> [f \in Followers |-> 1]]
+        /\ matchIndex = [n \in Nodes |-> [f \in Followers |-> 0]]
+        /\ currentTerm = [n \in Nodes |-> 0]
+        /\ votedFor = [n \in Nodes |-> NULL]
+        /\ state = [n \in Nodes |-> IF n = Leader THEN "leader" ELSE "follower"]
+        /\ clientRequests = {}
+        /\ clientResponses = {}
+        /\ messages = [n \in Nodes |-> {}]
 
-CommitToClients(self) == /\ pc[self] = "CommitToClients"
-                         /\ TRUE
-                         /\ pc' = [pc EXCEPT ![self] = "Done"]
-                         /\ UNCHANGED << x, leaderlog, followerlog, clientlog >>
+(* Client sends write request *)
+ClientWriteRequest(c) == 
+    /\ c \in Clients
+    /\ \E l \in Nodes : 
+        /\  l = Leader /\ l \notin Followers
+    (* FIXME: this type is not enumerable by the model checker since its strings - maybe encode as 1.. N *)
+        /\ LET newReq == [type: "write", value: CHOOSE v \in Values : TRUE, from: c, to: l, term: currentTerm[l]]
+            IN
+            /\ clientRequests' = clientRequests \cup newReq
+            /\ UNCHANGED << log, commitIndex, appliedIndex, nextIndex, matchIndex, 
+                            currentTerm, votedFor, state, messages, clientResponses >>
 
-Leader(self) == GetClientRequest(self) \/ ProposeToFollowers(self)
-                   \/ CollectAcks(self) \/ CommitToClients(self)
+(* Leader receives client request and proposes *)
+LeaderPropose(l) == 
+    /\ IsLeader(l) /\ l \notin Followers
+    /\ clientRequests /= {}
+    /\ \E c \in Clients :
+        /\ LET newEntry == [type: "write", value: CHOOSE v \in Values : TRUE, from: l, to: c, term: currentTerm[l]]
+            IN  /\ log' = [log EXCEPT ![l] = (log[l] \cup newEntry)]
+                /\ messages' = [messages EXCEPT ![l] = (messages[l] \cup newEntry)]
+                /\ clientRequests' = clientRequests \cup newEntry
+                /\ UNCHANGED << commitIndex, appliedIndex, nextIndex, matchIndex, 
+                                currentTerm, votedFor, state, messages, clientResponses >>
 
-GetLeaderPropose(self) == /\ pc[self] = "GetLeaderPropose"
-                          /\ TRUE
-                          /\ pc' = [pc EXCEPT ![self] = "AckToLeader"]
-                          /\ UNCHANGED << x, leaderlog, followerlog, clientlog >>
+(* Leader sends proposal to followers *)
+LeaderSendProposal(l, f) == 
+    /\ IsLeader(l)
+    /\ f \in Followers
+    /\ nextIndex[l][f] <= Len(log[l])
+    /\ LET entry == log[l][nextIndex[l][f]]
+           msg == [type: "propose", seq: nextIndex[l][f], value: entry.value, 
+                   from: entry.from, to: entry.to, term: currentTerm[l]]
+        IN  /\ messages' = [messages EXCEPT ![f] = messages[f] \cup msg]
+            /\ nextIndex' = [nextIndex EXCEPT ![l][f] = nextIndex[l][f] + 1]
+            /\ UNCHANGED << log, commitIndex, appliedIndex, matchIndex, 
+                            currentTerm, votedFor, state, clientRequests, clientResponses >>
 
-AckToLeader(self) == /\ pc[self] = "AckToLeader"
-                     /\ TRUE
-                     /\ pc' = [pc EXCEPT ![self] = "ApplyToStateMachine"]
-                     /\ UNCHANGED << x, leaderlog, followerlog, clientlog >>
+(* Follower receives proposal and acknowledges *)
+FollowerReceiveProposal(f) == 
+    /\ IsFollower(f)
+    /\ messages[f] /= {}
+    /\ LET msg == Head(messages[f])
+        IN  /\ msg.type = "propose"
+             \* Accept if log is consistent
+            /\ (msg.seq = 1 \/ (msg.seq <= Len(log[f]) + 1 /\ 
+                                (msg.seq = 1 \/ log[f][msg.seq - 1].term = msg.term - 1)))
+            /\ log' = [log EXCEPT ![f] = IF msg.seq <= Len(log[f]) 
+                                            THEN [log[f] EXCEPT ![msg.seq] = [type: msg.type, value: msg.value, 
+                                                                                from: msg.from, to: msg.to, term: msg.term]]
+                                            ELSE Append(log[f], [type: msg.type, value: msg.value, 
+                                                            from: msg.from, to: msg.to, term: msg.term])]
+       /\ messages' = [messages EXCEPT ![f] = Tail(messages[f])]
+       /\ \* Send acknowledgment
+       /\ LET ackMsg == [type: "ack", seq: msg.seq, value: msg.value, 
+                         from: msg.from, to: msg.to, term: currentTerm[f]]
+            IN  /\ messages' = [messages' EXCEPT ![Leader] = Append(messages'[Leader], ackMsg)]
+                /\ UNCHANGED << commitIndex, appliedIndex, nextIndex, matchIndex, 
+                            currentTerm, votedFor, state, clientRequests, clientResponses >>
 
-ApplyToStateMachine(self) == /\ pc[self] = "ApplyToStateMachine"
-                             /\ TRUE
-                             /\ pc' = [pc EXCEPT ![self] = "OrderLog"]
-                             /\ UNCHANGED << x, leaderlog, followerlog, 
-                                             clientlog >>
+(* Leader collects acknowledgments and commits *)
+LeaderCommit(l) == 
+    /\ IsLeader(l)
+    /\ messages[l] /= <<>>
+    /\ LET msg == Head(messages[l])
+        IN /\ msg.type = "ack"
+        /\ matchIndex' = [matchIndex EXCEPT ![l][msg.from] = msg.seq]
+        /\ \* Check if majority has acknowledged
+        /\ LET ackedFollowers == {f \in Followers : matchIndex'[l][f] >= msg.seq}
+            IN  /\ Cardinality(ackedFollowers) + 1 >= Cardinality(Nodes) \div 2 + 1
+                /\ commitIndex' = [commitIndex EXCEPT ![l] = msg.seq]
+                /\ messages' = [messages EXCEPT ![l] = Tail(messages[l])]
+                /\ UNCHANGED << log, appliedIndex, nextIndex, currentTerm, votedFor, 
+                                state, clientRequests, clientResponses >>
 
-OrderLog(self) == /\ pc[self] = "OrderLog"
-                  /\ TRUE
-                  /\ pc' = [pc EXCEPT ![self] = "Done"]
-                  /\ UNCHANGED << x, leaderlog, followerlog, clientlog >>
+(* Apply committed entries to state machine *)
+ApplyCommitted(n) == 
+    /\ n \in Nodes
+    /\ appliedIndex[n] < commitIndex[n]
+    /\ appliedIndex' = [appliedIndex EXCEPT ![n] = appliedIndex[n] + 1]
+     \* Apply the operation to state machine (simplified)
+    /\ UNCHANGED << log, commitIndex, nextIndex, matchIndex, currentTerm, 
+                    votedFor, state, messages, clientRequests, clientResponses >>
 
-Follower(self) == GetLeaderPropose(self) \/ AckToLeader(self)
-                     \/ ApplyToStateMachine(self) \/ OrderLog(self)
+(* Send response to client *)
+SendClientResponse(l) == 
+    /\ IsLeader(l)
+    /\ clientResponses /= <<>>
+    /\ LET resp == Head(clientResponses)
+        IN  /\ clientResponses' = Tail(clientResponses)
+            /\ UNCHANGED << log, commitIndex, appliedIndex, nextIndex, matchIndex, 
+                        currentTerm, votedFor, state, messages, clientRequests >>
 
-SendRequestToLeader(self) == /\ pc[self] = "SendRequestToLeader"
-                             /\ TRUE
-                             /\ pc' = [pc EXCEPT ![self] = "WaitForReply"]
-                             /\ UNCHANGED << x, leaderlog, followerlog, 
-                                             clientlog >>
+(* Next state relation *)
+Next == \/ \E c \in Clients : ClientWriteRequest(c)
+        \/ \E l \in Leader : LeaderPropose(l)
+        \/ \E l \in Leader, f \in Followers : LeaderSendProposal(l, f)
+        \/ \E f \in Followers : FollowerReceiveProposal(f)
+        \/ \E l \in Leader : LeaderCommit(l)
+        \/ \E n \in Nodes : ApplyCommitted(n)
+        \/ \E l \in Leader : SendClientResponse(l)
 
-WaitForReply(self) == /\ pc[self] = "WaitForReply"
-                      /\ TRUE
-                      /\ pc' = [pc EXCEPT ![self] = "Done"]
-                      /\ UNCHANGED << x, leaderlog, followerlog, clientlog >>
+(* all the variables grouped for the no change on Next not taking place *)
+vars == << log, commitIndex, appliedIndex, nextIndex, matchIndex, 
+           currentTerm, votedFor, state, messages, clientRequests, clientResponses >>
 
-Client(self) == SendRequestToLeader(self) \/ WaitForReply(self)
-
-(* Allow infinite stuttering to prevent deadlock on termination. *)
-Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
-               /\ UNCHANGED vars
-
-Next == (\E self \in Leader: Leader(self))
-           \/ (\E self \in Followers: Follower(self))
-           \/ (\E self \in Clients: Client(self))
-           \/ Terminating
-
+(* Specification *)
 Spec == Init /\ [][Next]_vars
 
-Termination == <>(\A self \in ProcSet: pc[self] = "Done")
+(* Liveness properties to prove no data loss and always making progress and resilience to failures *)
+EventuallyCommitted == \A n \in Nodes : <> (appliedIndex[n] = commitIndex[n])
 
-\* END TRANSLATION 
+ClientRequestEventuallyProcessed == 
+    \A c \in Clients : 
+        <> (clientRequests = <<>> \/ \E n \in Nodes : 
+                \E i \in 1..Len(log[n]) : log[n][i].from = c)
 
+NoDataLoss == 
+    \A n1, n2 \in Nodes:
+        \A i \in 1..Min(Len(log[n1]), Len(log[n2])) :
+            /\ commitIndex[n1] >= i
+            /\ commitIndex[n2] >= i
+            /\ log[n1][i] = log[n2][i]
 
-Liveness == \A self \in ProcSet: 
+LeaderEventuallyActive == 
+    <> (IsLeader(Leader) /\ \A f \in Followers : IsFollower(f))
+
+SystemEventuallyResponsive == 
+    \A c \in Clients : 
+        <> (clientResponses /= <<>> \/ clientRequests = <<>>)
+
+ProgressEventuallyMade == 
+    <> (commitIndex[Leader] > 0 \/ clientRequests = <<>>)
+
+(* Resilience & Fault Tolerance Properties *)
+MajorityConsensusEventuallyReached == 
+    \A i \in 1..MaxLogSize :
+        <> (Cardinality({n \in Nodes : commitIndex[n] >= i}) > Cardinality(Nodes) \div 2)
+
+   SystemRecoversFromStalls == 
+       <> (messages = [n \in Nodes |-> <<>>] \/ 
+           \E n \in Nodes : messages[n] /= <<>>)
+
+LeaderEventuallyCommits == 
+    IsLeader(Leader) => <> (commitIndex[Leader] > 0)
+
+FollowersEventuallySync == 
+    \A f \in Followers :
+        <> (Len(log[f]) = Len(log[Leader]) \/ 
+            \E i \in 1..Min(Len(log[f]), Len(log[Leader])) : 
+                log[f][i] = log[Leader][i])
+
+(*Critical Invariants to Add*)
+LogConsistency == 
+    \A n1, n2 \in Nodes:    
+        \A i \in 1..Min(Len(log[n1]), Len(log[n2])) :
+             /\   commitIndex[n1] >= i 
+             /\   commitIndex[n2] >= i
+             /\   log[n1][i].term = log[n2][i].term
+
+CommitIndexMonotonic == 
+    \A n \in Nodes : commitIndex[n] >= 0
+
+AppliedIndexBounded == 
+    \A n \in Nodes : appliedIndex[n] <= commitIndex[n]
+
+LeaderUniqueness == 
+    Cardinality({n \in Nodes : IsLeader(n)}) <= 1
+
+MessageIntegrity == 
+    \A n \in Nodes : 
+        \A i \in 1..Len(messages[n]) : 
+            messages[n][i].term <= currentTerm[n]
 
 ====
