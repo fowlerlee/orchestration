@@ -41,6 +41,21 @@ type Manager struct {
 	SentLength    []int
 	AckLength     []int
 
+	// IONIA port variables
+	durabilitylog map[string][]common.LogEntry
+	durabilityCommitIndex map[string]int
+	commitIndex map[string]int
+	appliedIndex map[string]int
+	nextIndex map[string]map[string]int
+	matchIndex map[string]map[string]int
+	currentTerm map[string]int
+	votedFor map[string]string
+	state map[string]ManagerElectionState
+	clientRequests map[string]common.ClientRequest
+	clientResponses map[string]common.ClientResponse
+
+
+	// RAFT variables
 	OtherManagers   []string
 	LastHeartbeat   time.Time
 	address         string
@@ -72,6 +87,16 @@ func MakeManager(address string) *Manager {
 	m.address = address
 	m.ID = uuid.New()
 	m.durabilitylog = make(map[string][]common.LogEntry)
+	m.durabilityCommitIndex = make(map[string]int)
+	m.commitIndex = make(map[string]int)
+	m.appliedIndex = make(map[string]int)
+	m.nextIndex = make(map[string]map[string]int)
+	m.matchIndex = make(map[string]map[string]int)
+	m.currentTerm = make(map[string]int)
+	m.votedFor = make(map[string]string)
+	m.state = make(map[string]ManagerElectionState)
+	m.clientRequests = make(map[string]common.ClientRequest)
+	m.clientResponses = make(map[string]common.ClientResponse)
 	m.Term = 0
 	m.VotedFor = ""
 	m.Log = []common.LogEntry{}
