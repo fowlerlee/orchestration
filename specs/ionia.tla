@@ -36,10 +36,10 @@ Max(a, b) == IF a <= b THEN b ELSE a
 (* this is used as in the Paxos description and Leslie's recommendation *)
 Send(m) == msgs' = msgs \cup {m}
 
-Message ==  [type : {"order"}, from : Leader, to : Followers] 
+Message ==  [type : {"order"}] 
             \* write and order operations for ionia (from leader to followers)
            \cup [type : {"ackOrder"}, from : Followers, to : Leader]
-           \cup [type : {"commit"}, from : Leader, to : Followers, val : Values]
+           \cup [type : {"commit"}]
            \cup [type : {"write"}, val : Values]
            \cup [type : {"apply"}, val : Values]
            \cup [type: {"ackWrite"}]
@@ -65,7 +65,7 @@ GetLastLogTerm(n) == IF log[n] = {} THEN 0 ELSE log[n][Len(log[n])].term
 (* Safety properties *)
 TypeInvarient == 
             /\ log \in [Nodes -> SUBSET Message]
-            /\ durabilitylog \in [Clients -> SUBSET Message]
+            /\ durabilitylog \in [Nodes -> SUBSET Message]
             /\ durabilityCommitIndex \in [Nodes -> Nat]
             /\ commitIndex \in [Nodes -> Nat]
             /\ appliedIndex \in [Nodes -> Nat]
@@ -79,7 +79,7 @@ TypeInvarient ==
 
 (* Initial state *)
 Init == /\ log = [n \in Nodes |-> {}]
-        /\ durabilitylog = [c \in Clients |-> {}]
+        /\ durabilitylog = [n \in Nodes |-> {}]
         /\ durabilityCommitIndex = [n \in Nodes |-> 0]
         /\ commitIndex = [n \in Nodes |-> 0]
         /\ appliedIndex = [n \in Nodes |-> 0]
@@ -91,94 +91,90 @@ Init == /\ log = [n \in Nodes |-> {}]
         /\ clientRequests = {}
         /\ clientResponses = {}
 
-ClientWriteRequest(c) == 
-(* Client sends write request *)
-    /\ \E l \in Nodes :
-        /\ IsLeader(l) /\ l \notin Followers
-        /\ clientRequests' = [clientRequests EXCEPT ![c] = [type: "write", val: CHOOSE v \in Values : TRUE]]
-        /\ Send([type: "write", val: CHOOSE v \in Values : TRUE])
-        /\ UNCHANGED << log, durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
+ClientWriteRequest(c, n) == 
+    /\ IsLeader(n) \/  IsFollower(n)
+    /\ clientRequests' = [clientRequests EXCEPT ![c] = [type: "write", val: CHOOSE v \in Values : TRUE]]
+    /\ Send([type: "write", val: CHOOSE v \in Values : TRUE])
+    /\ UNCHANGED << log, durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
                             currentTerm, votedFor, state, clientResponses >>
 
-(* Follower receives proposal and acknowledges *)
-LeaderReceiveWrite(l) == 
-        /\ IsLeader(l)
+LeaderReceiveWrite(n) ==
+        /\ IsLeader(n)
         /\ clientRequests /= {}
-        /\ durabilitylog' = [durabilitylog EXCEPT ![l] = Append(durabilitylog[l], [type : {"write"}, val : CHOOSE v \in Values : TRUE])]
+        /\ durabilitylog' = [durabilitylog EXCEPT ![n] = Append(durabilitylog[n], [type : {"write"}, val : CHOOSE v \in Values : TRUE])]
         /\ Send([type : {"ackWrite"}]) 
         /\ UNCHANGED << durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
                                 currentTerm, votedFor, state, clientRequests, clientResponses >>
 
-
-(* Leader receives client request and proposes *)
-LeaderBackgroudOrder(l, f) == 
-    /\ IsLeader(l) /\ l \notin Followers
-    /\ durabilitylog[l] /= {}
-    /\ Send([type : {"order"}, from : l, to : f])
-    /\ durabilitylog' = [durabilitylog EXCEPT ![l] = Append(durabilitylog[l], [type : {"write"}, val : CHOOSE v \in Values : TRUE])]
-    /\ UNCHANGED << log, durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
+LeaderBackgroudOrder(n) == 
+    /\ IsLeader(n)
+    /\ durabilitylog[n] /= {}
+    /\ \E f \in Nodes : 
+            /\ IsFollower(f)
+            /\ Send([type : {"order"}])
+            /\ durabilitylog' = [durabilitylog EXCEPT ![f] = Append(durabilitylog[f], [type : {"order"}])]
+    /\ log' = [log EXCEPT ![n] = Append(log[n], [type : {"write"}, val : CHOOSE v \in Values : TRUE])]
+    /\ UNCHANGED << durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
                                 currentTerm, votedFor, state, clientResponses >>
 
 (* Leader sends proposal to followers *)
-LeaderApply(l, f) == 
-    /\ IsLeader(l) 
-    /\ durabilitylog[l] /= {}
-    /\ durabilitylog[f] /= {}
-    /\ log' = [log EXCEPT ![l] = Append(log[l], [type : {"apply"}, val : CHOOSE v \in Values : TRUE])]
-            /\ UNCHANGED << log, durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, matchIndex, 
+LeaderApply(n) ==  
+    /\ IsLeader(n) 
+    /\ durabilitylog[n] /= {}
+    /\ log' = [log EXCEPT ![n] = Append(log[n], [type : {"apply"}, val : CHOOSE v \in Values : TRUE])]
+            /\ UNCHANGED << durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, matchIndex, 
                             currentTerm, votedFor, state, clientRequests, clientResponses >>
 
 (* Follower receives proposal and acknowledges *)
-FollowerReceiveWrite(f) == 
-        /\ IsFollower(f)
+FollowerReceiveWrite(n) == 
+        /\ IsFollower(n)
         /\ clientRequests /= {}
-        /\ durabilitylog' = [durabilitylog EXCEPT ![f] = Append(durabilitylog[f], [type : {"write"}, val : CHOOSE v \in Values : TRUE])]
+        /\ durabilitylog' = [durabilitylog EXCEPT ![n] = Append(durabilitylog[n], [type : {"write"}, val : CHOOSE v \in Values : TRUE])]
         /\ Send([type : {"ackWrite"}]) 
-        /\ UNCHANGED << durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
+        /\ UNCHANGED << durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
                                 currentTerm, votedFor, state, clientRequests, clientResponses >>
 
 (* Follower receives order edges *)
-FollowerReceiveOrder(l, f) == 
-        /\ IsFollower(f)
-        /\ durabilitylog[f] /= {}
+FollowerReceiveOrder(n) == 
+        /\ IsFollower(n)
+        /\ durabilitylog[n] /= {}
         /\ Send([type : {"ackWrite"}]) 
-        /\ durabilitylog' = [durabilitylog EXCEPT ![f] = Append(durabilitylog[f], [type : {"write"}, val : CHOOSE v \in Values : TRUE])]
+        /\ log' = [log EXCEPT ![n] = Append(durabilitylog[n], [type : {"write"}, val : CHOOSE v \in Values : TRUE])]
                     /\ UNCHANGED << durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
                                 currentTerm, votedFor, state, clientRequests, clientResponses >>
 
 (* Leader collects acknowledgments and commits *)
-LeaderCommit(l) ==  /\ IsLeader(l) 
-                    /\ state[l] = "leader"
+LeaderCommit(n) ==  /\ IsLeader(n) 
+                    /\ state[n] = "leader"
+                    /\ Send([type : {"commit"}])
                     /\ UNCHANGED << log, durabilitylog, durabilityCommitIndex, appliedIndex, nextIndex, currentTerm, votedFor, 
                                     state, clientRequests, clientResponses >>
 
 (* Apply committed entries to state machine *)
 ApplyCommitted(n) == 
-            /\ n \in Nodes
-            /\ state[n] = "leader"
-            /\ appliedIndex[n] < commitIndex[n]
-            /\ appliedIndex' = [appliedIndex EXCEPT ![n] = appliedIndex[n] + 1]
-            \* Apply the operation to state machine (simplified)
-            /\ UNCHANGED << log, durabilitylog, durabilityCommitIndex, commitIndex, nextIndex, matchIndex, currentTerm, 
+            /\ IsFollower(n)
+            /\ durabilitylog[n] /= {}
+            /\ log' = [log EXCEPT ![n] = Append(log[n], [type : {"apply"}, val : CHOOSE v \in Values : TRUE])]
+            /\ UNCHANGED << durabilitylog, durabilityCommitIndex, commitIndex, nextIndex, matchIndex, currentTerm, 
                             votedFor, state, clientRequests, clientResponses, msgs>>
 
 (* Send response to client *)
-SendClientResponse(l) == 
-                /\ IsLeader(l)
+SendClientResponse(n) == 
+                /\ IsLeader(n) \/ IsFollower(n)
                 /\ clientResponses /= {}
-                /\ LET resp == Head(clientResponses)
-                    IN  /\ clientResponses' = Tail(clientResponses)
-                        /\ UNCHANGED << log, durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
+                /\ Send([type: {"ackWrite"}])
+                        /\ UNCHANGED << durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 
                                     currentTerm, votedFor, state, clientRequests, clientResponses>>
 
 (* Next state relation *)
-Next ==     \/  \E c \in Clients : ClientWriteRequest(c)
-            \/  \E l \in Leader, f \in Followers : 
-                    \/  LeaderBackgroudOrder(l, f) 
-                    \/  LeaderApply(l, f)
-                    \/  FollowerReceiveOrder(l, f)
-            \/  \E l \in Leader : LeaderCommit(l) \/ SendClientResponse(l)
-            \/  \E n \in Nodes : ApplyCommitted(n)
+Next ==    \E c \in Clients, n \in Nodes :
+                \/  ClientWriteRequest(c, n)
+                \/  LeaderApply(n)
+                \/  FollowerReceiveOrder(n)
+                \/  ApplyCommitted(n)
+                \/  LeaderCommit(n) 
+                \/  SendClientResponse(n)
+                \/  LeaderBackgroudOrder(n)
 
 (* all the variables grouped for the no change on Next not taking place *)
 vars ==  << log, durabilitylog, durabilityCommitIndex, commitIndex, appliedIndex, nextIndex, matchIndex, 

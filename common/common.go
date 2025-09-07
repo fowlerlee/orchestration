@@ -140,7 +140,7 @@ type ClientResponse struct {
 
 func (q *Queue) Enqueue(item string) {
 	q.lock.Lock()
-	defer q.lock.Lock()
+	defer q.lock.Unlock()
 	q.Items = append(q.Items, item)
 }
 

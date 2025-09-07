@@ -46,7 +46,7 @@ var registerModel = porc.Model{
 	},
 }
 
-func TestWorkerWrite(t *testing.T) {
+func TestWorkerLinearizability(t *testing.T) {
 
 	ops := []porc.Operation{
 		{0, WorkerHarness{0,0,true}, 0, 0, 100},
