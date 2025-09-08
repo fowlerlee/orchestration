@@ -90,6 +90,7 @@ Init == /\ log = [n \in Nodes |-> {}]
         /\ state = [n \in Nodes |-> IF n = Leader THEN "leader" ELSE "follower"]
         /\ clientRequests = {}
         /\ clientResponses = {}
+        /\ msgs = {}
 
 ClientWriteRequest(c, n) == 
     /\ IsLeader(n) \/  IsFollower(n)
