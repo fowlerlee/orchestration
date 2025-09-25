@@ -71,4 +71,15 @@ go run main.go
 
 ````
 
+### Linting before commit - we dont have lint checks on the ci/cd
+
+make sure you run the following
+
+`````
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.54.2
+
+golangci-lint run ./...
+
+`````
+
 <h3 align="center" > <img src="./orchestration.png" width="700" height="600" style="center: 10px;"></h3

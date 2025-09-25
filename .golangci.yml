@@ -1,0 +1,15 @@
+run:
+  timeout: 5m
+
+linters-settings:
+  govet:
+    check-shadowing: true
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - unparam
+  disable:
+    - funlen
+    - gocyclo
