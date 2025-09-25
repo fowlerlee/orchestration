@@ -89,9 +89,9 @@ type WorkerIPAddressResult struct {
 
 type RequestVoteArgs struct {
 	CandidateID string
-	CurrentTerm        int
-	LogLength int
-	LastTerm int
+	CurrentTerm int
+	LogLength   int
+	LastTerm    int
 }
 
 type RequestVoteReply struct {
@@ -130,9 +130,17 @@ type LeaderInfoReply struct {
 	Term      int
 }
 
+// IONIA port variables
+
+type ClientRequest struct {
+}
+
+type ClientResponse struct {
+}
+
 func (q *Queue) Enqueue(item string) {
 	q.lock.Lock()
-	defer q.lock.Lock()
+	defer q.lock.Unlock()
 	q.Items = append(q.Items, item)
 }
 

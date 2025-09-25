@@ -20,8 +20,10 @@ The Worker uses a VirtualMemory via its cgo tooling. The Virtual Memory is made 
 - Rust to C to Go Virtual Memory implementation - done
 - Reed-Solomon erasure codes implementation - ongoing 
 - Demonstrate Raft consensus between several managers - ongoing
-- Demonstrate Lock Service for Manager communicating with several Clients - ongoing
 - Demonstrate KVRaft algorithm for the Workers and their KVStore - ongoing
+- Demonstrate Lock Service for Manager communicating with several Clients - ongoing
+- Change from Raft to the IONIA protocol from Xu et al (IonIa: High-Performance Replication for Modern Disk-based KV Stores) - ongoing
+- import the GeeqoDB system with scripts and build for storage on the Master and Worker - done
 
 Note: Reed-Solomon implementation is inspired and ported from the OSS implementation by BackBlaze -> https://www.backblaze.com/blog/reed-solomon/ . The implementation is in Java and can be viewed at https://github.com/Backblaze/JavaReedSolomon
 
