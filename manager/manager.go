@@ -42,46 +42,47 @@ type Manager struct {
 	AckLength     []int
 
 	// IONIA port variables
-	durabilitylog map[string][]common.LogEntry
+	durabilitylog         map[string][]common.LogEntry
 	durabilityCommitIndex map[string]int
-	commitIndex map[string]int
-	appliedIndex map[string]int
-	nextIndex map[string]map[string]int
-	matchIndex map[string]map[string]int
-	currentTerm map[string]int
-	votedFor map[string]string
-	state map[string]ManagerElectionState
-	clientRequests map[string]common.ClientRequest
-	clientResponses map[string]common.ClientResponse
-
+	commitIndex           map[string]int
+	appliedIndex          map[string]int
+	nextIndex             map[string]map[string]int
+	matchIndex            map[string]map[string]int
+	currentTerm           map[string]int
+	votedFor              map[string]string
+	state                 map[string]ManagerElectionState
+	clientRequests        map[string]common.ClientRequest
+	clientResponses       map[string]common.ClientResponse
 
 	// RAFT variables
-	OtherManagers   []string
-	LastHeartbeat   time.Time
-	address         string
-	doneChannel     chan bool
-	ID              uuid.UUID
-	Queue           common.Queue
-	RegisterChannel chan string
-	Workers         []string
-	WorkerTaskMap   map[string][]uuid.UUID
-	l               net.Listener
-	shutdown        chan struct{}
-	WorkerBackups   map[string][][]byte
+	OtherManagers    []string
+	LastHeartbeat    time.Time
+	address          string
+	doneChannel      chan bool
+	ID               uuid.UUID
+	Queue            common.Queue
+	RegisterChannel  chan string
+	Workers          []string
+	WorkerTaskMap    map[string][]uuid.UUID
+	l                net.Listener
+	shutdown         chan struct{}
+	shutdownComplete bool
+	WorkerBackups    map[string][][]byte
 }
 
 // Init == /\ log = [n \in Nodes |-> {}]
-//         /\ durabilitylog = [n \in Nodes |-> {}]
-//         /\ durabilityCommitIndex = [n \in Nodes |-> 0]
-//         /\ commitIndex = [n \in Nodes |-> 0]
-//         /\ appliedIndex = [n \in Nodes |-> 0]
-//         /\ nextIndex = [n \in Nodes |-> [f \in Followers |-> 1]]
-//         /\ matchIndex = [n \in Nodes |-> [f \in Followers |-> 0]]
-//         /\ currentTerm = [n \in Nodes |-> 0]
-//         /\ votedFor = [n \in Nodes |-> NULL]
-//         /\ state = [n \in Nodes |-> IF n = Leader THEN "leader" ELSE "follower"]
-//         /\ clientRequests = {}
-//         /\ clientResponses = {}
+//
+//	/\ durabilitylog = [n \in Nodes |-> {}]
+//	/\ durabilityCommitIndex = [n \in Nodes |-> 0]
+//	/\ commitIndex = [n \in Nodes |-> 0]
+//	/\ appliedIndex = [n \in Nodes |-> 0]
+//	/\ nextIndex = [n \in Nodes |-> [f \in Followers |-> 1]]
+//	/\ matchIndex = [n \in Nodes |-> [f \in Followers |-> 0]]
+//	/\ currentTerm = [n \in Nodes |-> 0]
+//	/\ votedFor = [n \in Nodes |-> NULL]
+//	/\ state = [n \in Nodes |-> IF n = Leader THEN "leader" ELSE "follower"]
+//	/\ clientRequests = {}
+//	/\ clientResponses = {}
 func MakeManager(address string) *Manager {
 	m := new(Manager)
 	m.address = address
@@ -145,10 +146,13 @@ func (m *Manager) StartManagerRPC() {
 	if errX != nil {
 		fmt.Println("failed to register manager with rpc server")
 	}
-	os.Remove(m.address)
+	// Only remove address if it's a Unix socket (file path), not for TCP
+	if common.Protocol == "unix" {
+		os.Remove(m.address)
+	}
 	l, err := net.Listen(common.Protocol, m.address)
 	if err != nil {
-		log.Fatalf("manager RPC Server not created at %v", m.address)
+		log.Fatalf("manager RPC Server not created at %v: %v", m.address, err)
 	}
 	m.l = l
 	fmt.Println("manager rpc seems to be live!")
@@ -192,24 +196,57 @@ func (m *Manager) StopManagerRPC() error {
 	if err != nil {
 		return err
 	}
-	reply := &common.MasterShutdownReply{}
-	args := &common.MasterShutdownArgs{}
-	rpcMethod := "Manager.Shutdown"
 
-	ok := common.RpcCall(m.address, rpcMethod, args, reply)
-	if !ok {
-		return fmt.Errorf("failed to call the %v rpc method \n", rpcMethod)
+	// Directly perform shutdown instead of making RPC call to self
+	m.Lock()
+	defer m.Unlock()
+
+	// Check if already shut down
+	if m.shutdownComplete {
+		return nil
 	}
+
+	// Signal shutdown
+	select {
+	case m.shutdown <- struct{}{}:
+	default:
+		// Channel might already be closed or full
+	}
+	close(m.shutdown)
+	m.shutdownComplete = true
+
+	// Close listener
+	if m.l != nil {
+		if err := m.l.Close(); err != nil {
+			return fmt.Errorf("error closing manager listener: %v", err)
+		}
+	}
+
+	fmt.Println("manager was stopped and cleaned up")
 	return nil
 }
 
 func (m *Manager) Shutdown(args *common.MasterShutdownReply, reply *common.MasterShutdownArgs) error {
+	m.Lock()
+	defer m.Unlock()
+
+	// Check if already shut down
+	if m.shutdownComplete {
+		return nil
+	}
 
 	// todo - get workers ip address then close resources
-	m.shutdown <- struct{}{}
+	select {
+	case m.shutdown <- struct{}{}:
+	default:
+		// Channel might already be closed or full
+	}
 	close(m.shutdown)
+	m.shutdownComplete = true
 
-	m.l.Close()
+	if m.l != nil {
+		m.l.Close()
+	}
 	fmt.Println("manager was stopped and cleaned up")
 	return nil
 }

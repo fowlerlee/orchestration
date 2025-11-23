@@ -146,10 +146,13 @@ func (w *Worker) StartWorkerRPC() {
 	if errX != nil {
 		log.Fatalf("failed to register worker with rpc server: %v", errX)
 	}
-	os.Remove(w.Address)
+	// Only remove address if it's a Unix socket (file path), not for TCP
+	if common.Protocol == "unix" {
+		os.Remove(w.Address)
+	}
 	l, err := net.Listen(common.Protocol, w.Address)
 	if err != nil {
-		log.Fatalf("worker RPC server not initiated: %v", err)
+		log.Fatalf("worker RPC server not initiated at %v: %v", w.Address, err)
 	}
 	w.l = l
 	fmt.Println("worker rpc seems to be live!")

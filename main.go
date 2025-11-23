@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/fowlerlee/orchestration/client"
@@ -22,15 +23,22 @@ func main() {
 	addressWorker3 := localhost + "8084"
 
 	if len(os.Args) == 6 {
-		addressClient = os.Args[1]
-		addressManager = os.Args[2]
-		addressWorker1 = os.Args[3]
-		addressWorker2 = os.Args[4]
-		addressWorker3 = os.Args[5]
+		// Normalize addresses: if just a port number, prepend "localhost:"
+		normalizeAddress := func(addr string) string {
+			if addr != "" && !strings.Contains(addr, ":") {
+				return localhost + addr
+			}
+			return addr
+		}
+		addressClient = normalizeAddress(os.Args[1])
+		addressManager = normalizeAddress(os.Args[2])
+		addressWorker1 = normalizeAddress(os.Args[3])
+		addressWorker2 = normalizeAddress(os.Args[4])
+		addressWorker3 = normalizeAddress(os.Args[5])
 	}
 
 	m := manager.MakeManager(addressManager)
-	m.StartManagerRPC()
+	// StartManagerRPC() is already called in MakeManager()
 
 	c := client.MakeClient(addressClient)
 	c.StartClientRPC()
@@ -38,12 +46,19 @@ func main() {
 	w1 := worker.CreateWorker(addressWorker1)
 	w2 := worker.CreateWorker(addressWorker2)
 	w3 := worker.CreateWorker(addressWorker3)
-	w1.StartWorkerRPC()
-	w2.StartWorkerRPC()
-	w3.StartWorkerRPC()
-	w1.RegisterWithManager(addressManager)
-	w2.RegisterWithManager(addressManager)
-	w3.RegisterWithManager(addressManager)
+	// StartWorkerRPC() is already called in CreateWorker()
+	if err := w1.RegisterWithManager(addressManager); err != nil {
+		fmt.Printf("failed to register worker 1 with manager: %v", err)
+	}
+	if err := w2.RegisterWithManager(addressManager); err != nil {
+		fmt.Printf("failed to register worker 2 with manager: %v", err)
+	}
+	if err := w3.RegisterWithManager(addressManager); err != nil {
+		fmt.Printf("failed to register worker 3 with manager: %v", err)
+	}
+	if err := w3.RegisterWithManager(addressManager); err != nil {
+		fmt.Printf("failed to register worker 3 with manager: %v", err)
+	}
 
 	time.Sleep(2 * time.Millisecond)
 	argsCl := &common.ClientManagerArgs{}

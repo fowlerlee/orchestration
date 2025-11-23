@@ -99,11 +99,6 @@ type RequestVoteReply struct {
 	Term        int
 }
 
-type Queue struct {
-	Items []string
-	lock  sync.Mutex
-}
-
 type WorkerInfoArgs struct {
 }
 
@@ -136,6 +131,13 @@ type ClientRequest struct {
 }
 
 type ClientResponse struct {
+}
+
+
+// QUEUE implementation
+type Queue struct {
+	Items []string
+	lock  sync.Mutex
 }
 
 func (q *Queue) Enqueue(item string) {

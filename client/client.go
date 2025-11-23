@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -21,14 +22,15 @@ const (
 
 type Client struct {
 	sync.Mutex
-	ID         uuid.UUID
-	address    string
-	Queue      common.Queue
-	shutdown   chan struct{}
-	State      CState
-	l          net.Listener
-	httpServer *http.Server
-	wg         sync.WaitGroup
+	ID              uuid.UUID
+	address         string
+	Queue           common.Queue
+	shutdown        chan struct{}
+	shutdownComplete bool
+	State           CState
+	l               net.Listener
+	httpServer      *http.Server
+	wg              sync.WaitGroup
 }
 
 func MakeClient(address string) *Client {
@@ -46,12 +48,15 @@ func (c *Client) StartClientRPC() {
 	rpcs := rpc.NewServer()
 	err := rpcs.Register(c)
 	if err != nil {
-		fmt.Errorf("failed to register client to the rpc: %v", err)
+		log.Fatalf("failed to register client to the rpc: %v", err)
 	}
-	os.Remove(c.address)
+	// Only remove address if it's a Unix socket (file path), not for TCP
+	if common.Protocol == "unix" {
+		os.Remove(c.address)
+	}
 	l, err := net.Listen(common.Protocol, c.address)
 	if err != nil {
-		fmt.Errorf("failed to create listener for the client server")
+		log.Fatalf("failed to create listener for the client server at %v: %v", c.address, err)
 	}
 	c.l = l
 
@@ -97,30 +102,69 @@ func (c *Client) SendWorkToManager() {
 }
 
 func (client *Client) StopClientRPC() error {
-	reply := &common.ClientShutdownReply{}
-	args := &common.ClientShutdownArgs{}
-	rpcName := "Client.Shutdown"
-
-	ok := common.RpcCall(client.address, rpcName, args, reply)
-	if !ok {
-		return fmt.Errorf("failed to call %v rpc method", rpcName)
+	// Directly perform shutdown instead of making RPC call to self
+	client.Lock()
+	defer client.Unlock()
+	
+	// Check if already shut down
+	if client.shutdownComplete {
+		return nil
 	}
+	
+	// Signal shutdown
+	select {
+	case client.shutdown <- struct{}{}:
+	default:
+		// Channel might already be closed or full
+	}
+	close(client.shutdown)
+	client.shutdownComplete = true
+	
+	// Close HTTP server if running
+	if client.httpServer != nil {
+		if err := client.httpServer.Close(); err != nil {
+			fmt.Printf("Error closing HTTP server: %v\n", err)
+		}
+	}
+	
+	// Close listener
+	if client.l != nil {
+		if err := client.l.Close(); err != nil {
+			return fmt.Errorf("error closing client listener: %v", err)
+		}
+	}
+	
+	fmt.Println("client was stopped and cleaned up")
 	return nil
 }
 
 func (c *Client) Shutdown(args *common.ClientShutdownArgs, reply *common.ClientShutdownReply) error {
 	c.Lock()
 	defer c.Unlock()
-
-	c.shutdown <- struct{}{}
-	close(c.shutdown)
-	c.l.Close()
-	if err := c.httpServer.Close(); err != nil {
-		fmt.Printf("Error closing HTTP server: %v\n", err)
+	
+	// Check if already shut down
+	if c.shutdownComplete {
+		return nil
 	}
 
-	if err := c.l.Close(); err != nil {
-		return fmt.Errorf("error closing the rpc listener for client: %v", err)
+	select {
+	case c.shutdown <- struct{}{}:
+	default:
+		// Channel might already be closed or full
+	}
+	close(c.shutdown)
+	c.shutdownComplete = true
+	
+	if c.l != nil {
+		if err := c.l.Close(); err != nil {
+			return fmt.Errorf("error closing the rpc listener for client: %v", err)
+		}
+	}
+	
+	if c.httpServer != nil {
+		if err := c.httpServer.Close(); err != nil {
+			fmt.Printf("Error closing HTTP server: %v\n", err)
+		}
 	}
 
 	// c.wg.Wait()
