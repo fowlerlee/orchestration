@@ -42,6 +42,7 @@ type Manager struct {
 	AckLength     []int
 
 	// IONIA port variables
+	log                   map[string][]common.LogEntry // per-node replicated log
 	durabilitylog         map[string][]common.LogEntry
 	durabilityCommitIndex map[string]int
 	commitIndex           map[string]int
@@ -87,6 +88,7 @@ func MakeManager(address string) *Manager {
 	m := new(Manager)
 	m.address = address
 	m.ID = uuid.New()
+	m.log = make(map[string][]common.LogEntry)
 	m.durabilitylog = make(map[string][]common.LogEntry)
 	m.durabilityCommitIndex = make(map[string]int)
 	m.commitIndex = make(map[string]int)

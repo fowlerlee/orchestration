@@ -3,187 +3,216 @@ EXTENDS TLC, Naturals, Integers, Sequences
 
 CONSTANT Workers, Manager, Clients
 
-Messages == [type: {"task"}, s: Manager, r: Workers] \union 
-            [type: {"working", "completed", "waiting"}, s: Workers, r: Manager] \cup 
-            [type: {"inprogress", "finished"}, s: Manager, r: Clients] \cup
+Messages == [type: {"task"}, s: Manager, r: Workers, client: Clients] \union 
+            [type: {"completed"}, s: Workers, r: Manager, client: Clients] \cup 
+            [type: {"finished"}, s: Manager, r: Clients] \cup
             [type: {"doWork"}, s: Clients, r: Manager]
             
 
-Actors == {Workers \union Manager \cup Clients}
+Actors == Workers \union Manager \union Clients
 
 (*--algorithm orchestrator
 
-variables msgs = {}, wState = [w \in Workers |-> "waiting"],
+variables wState = [w \in Workers |-> "waiting"],
             mState = [m \in Manager |-> "ready"],
             cState = [c \in Clients |-> "idle"],
             queues = [q \in Actors |-> <<>>];
             
 macro send(id, msg) begin
-    queues := Append(queues[id], msg);
+    queues[id] := Append(queues[id], msg);
 end macro;
 
 macro receive(msg) begin
-    await Len(queues[self] > 0);
+    await Len(queues[self]) > 0;
     msg := Head(queues[self]);
-    queues := Tail(queues[self]);
+    queues[self] := Tail(queues[self]);
 end macro;
 
 process worker \in Workers
-variable workQueue = <<>>;
+variable current_msg = <<>>;
 begin
-    WaitForWork:
-        skip;
-    PerformWork:
-        skip;
-        
+    WorkerLoop:
+        while TRUE do
+            WaitForWork:
+                receive(current_msg);
+            ProcessTask:
+                if current_msg.type = "task" then
+                    wState[self] := "working";
+            PerformWork:
+                    \* simulate work
+                    wState[self] := "waiting";
+                    with m = current_msg.s do
+                        send(m, [type |-> "completed", s |-> self, r |-> m, client |-> current_msg.client]);
+                    end with;
+                end if;
+        end while;
 end process;
 
 process client \in Clients
-variable msg = <<>>;
+variable current_msg = <<>>;
 begin
     SendTaskToManager:
-        if msg = <<>> then
-            with m \in Manager do
-                send(self, [type |-> "doWork", s |-> self, r |-> m]);
-            end with;
-        end if;
-    ReceiveTaskFinish:
         with m \in Manager do
-            if 
-                /\ msgs.type = "finished"
-                /\ mState[m] = "done"
-            then
-                receive(msg);
-            else 
-                goto SendTaskToManager;
-            end if;
+            send(m, [type |-> "doWork", s |-> self, r |-> m]);
         end with;
+    ReceiveTaskFinish:
+        receive(current_msg);
+    ProcessFinish:
+        if current_msg.type = "finished" then
+            cState[self] := "idle";
+        else 
+            goto ReceiveTaskFinish;
+        end if;
 end process;
 
 process manager \in Manager
+variable current_msg = <<>>;
 begin
-    NotifyClientOfCompleteJob:
-       if msgs.type = "completed" then
-            with c \in Clients do
-                send(self, [type |-> "finished", s |-> self, r |-> c]);
-            end with;
-       end if;
-    ReceiveTaskFromClient:
-        skip;
-    GiveTaskToWorker:
-        skip;
-
+    ManagerLoop:
+        while TRUE do
+            ReceiveManagerTask:
+                receive(current_msg);
+            ProcessManagerTask:
+                if current_msg.type = "doWork" then
+                    with w \in Workers do
+                        send(w, [type |-> "task", s |-> self, r |-> w, client |-> current_msg.s]);
+                    end with;
+                elsif current_msg.type = "completed" then
+                    send(current_msg.client, [type |-> "finished", s |-> self, r |-> current_msg.client]);
+                end if;
+        end while;
 end process;
 
-
 end algorithm; *)
-\* BEGIN TRANSLATION (chksum(pcal) = "901ddb8f" /\ chksum(tla) = "580405ba")
-VARIABLES msgs, wState, mState, cState, queues, pc, workQueue, msg
+\* BEGIN TRANSLATION
+\* Process variable current_msg of process worker at line 32 col 10 changed to current_msg_
+\* Process variable current_msg of process client at line 52 col 10 changed to current_msg_c
+VARIABLES wState, mState, cState, queues, pc, current_msg_, current_msg_c, 
+          current_msg
 
-vars == << msgs, wState, mState, cState, queues, pc, workQueue, msg >>
+vars == << wState, mState, cState, queues, pc, current_msg_, current_msg_c, 
+           current_msg >>
 
 ProcSet == (Workers) \cup (Clients) \cup (Manager)
 
 Init == (* Global variables *)
-        /\ msgs = {}
         /\ wState = [w \in Workers |-> "waiting"]
         /\ mState = [m \in Manager |-> "ready"]
         /\ cState = [c \in Clients |-> "idle"]
         /\ queues = [q \in Actors |-> <<>>]
         (* Process worker *)
-        /\ workQueue = [self \in Workers |-> <<>>]
+        /\ current_msg_ = [self \in Workers |-> <<>>]
         (* Process client *)
-        /\ msg = [self \in Clients |-> <<>>]
-        /\ pc = [self \in ProcSet |-> CASE self \in Workers -> "WaitForWork"
+        /\ current_msg_c = [self \in Clients |-> <<>>]
+        (* Process manager *)
+        /\ current_msg = [self \in Manager |-> <<>>]
+        /\ pc = [self \in ProcSet |-> CASE self \in Workers -> "WorkerLoop"
                                         [] self \in Clients -> "SendTaskToManager"
-                                        [] self \in Manager -> "NotifyClientOfCompleteJob"]
+                                        [] self \in Manager -> "ManagerLoop"]
+
+WorkerLoop(self) == /\ pc[self] = "WorkerLoop"
+                    /\ pc' = [pc EXCEPT ![self] = "WaitForWork"]
+                    /\ UNCHANGED << wState, mState, cState, queues, 
+                                    current_msg_, current_msg_c, current_msg >>
 
 WaitForWork(self) == /\ pc[self] = "WaitForWork"
-                     /\ TRUE
-                     /\ pc' = [pc EXCEPT ![self] = "PerformWork"]
-                     /\ UNCHANGED << msgs, wState, mState, cState, queues, 
-                                     workQueue, msg >>
+                     /\ Len(queues[self]) > 0
+                     /\ current_msg_' = [current_msg_ EXCEPT ![self] = Head(queues[self])]
+                     /\ queues' = [queues EXCEPT ![self] = Tail(queues[self])]
+                     /\ pc' = [pc EXCEPT ![self] = "ProcessTask"]
+                     /\ UNCHANGED << wState, mState, cState, current_msg_c, 
+                                     current_msg >>
+
+ProcessTask(self) == /\ pc[self] = "ProcessTask"
+                     /\ IF current_msg_[self].type = "task"
+                           THEN /\ wState' = [wState EXCEPT ![self] = "working"]
+                                /\ pc' = [pc EXCEPT ![self] = "PerformWork"]
+                           ELSE /\ pc' = [pc EXCEPT ![self] = "WorkerLoop"]
+                                /\ UNCHANGED wState
+                     /\ UNCHANGED << mState, cState, queues, current_msg_, 
+                                     current_msg_c, current_msg >>
 
 PerformWork(self) == /\ pc[self] = "PerformWork"
-                     /\ TRUE
-                     /\ pc' = [pc EXCEPT ![self] = "Done"]
-                     /\ UNCHANGED << msgs, wState, mState, cState, queues, 
-                                     workQueue, msg >>
+                     /\ wState' = [wState EXCEPT ![self] = "waiting"]
+                     /\ LET m == current_msg_[self].s IN
+                          queues' = [queues EXCEPT ![m] = Append(queues[m], ([type |-> "completed", s |-> self, r |-> m, client |-> current_msg_[self].client]))]
+                     /\ pc' = [pc EXCEPT ![self] = "WorkerLoop"]
+                     /\ UNCHANGED << mState, cState, current_msg_, 
+                                     current_msg_c, current_msg >>
 
-worker(self) == WaitForWork(self) \/ PerformWork(self)
+worker(self) == WorkerLoop(self) \/ WaitForWork(self) \/ ProcessTask(self)
+                   \/ PerformWork(self)
 
 SendTaskToManager(self) == /\ pc[self] = "SendTaskToManager"
-                           /\ IF msg[self] = <<>>
-                                 THEN /\ \E m \in Manager:
-                                           queues' = Append(queues[self], ([type |-> "doWork", s |-> self, r |-> m]))
-                                 ELSE /\ TRUE
-                                      /\ UNCHANGED queues
+                           /\ \E m \in Manager:
+                                queues' = [queues EXCEPT ![m] = Append(queues[m], ([type |-> "doWork", s |-> self, r |-> m]))]
                            /\ pc' = [pc EXCEPT ![self] = "ReceiveTaskFinish"]
-                           /\ UNCHANGED << msgs, wState, mState, cState, 
-                                           workQueue, msg >>
+                           /\ UNCHANGED << wState, mState, cState, 
+                                           current_msg_, current_msg_c, 
+                                           current_msg >>
 
 ReceiveTaskFinish(self) == /\ pc[self] = "ReceiveTaskFinish"
-                           /\ \E m \in Manager:
-                                IF /\ msgs.type = "finished"
-                                   /\ mState[m] = "done"
-                                   THEN /\ Len(queues[self] > 0)
-                                        /\ msg' = [msg EXCEPT ![self] = Head(queues[self])]
-                                        /\ queues' = Tail(queues[self])
-                                        /\ pc' = [pc EXCEPT ![self] = "Done"]
-                                   ELSE /\ pc' = [pc EXCEPT ![self] = "SendTaskToManager"]
-                                        /\ UNCHANGED << queues, msg >>
-                           /\ UNCHANGED << msgs, wState, mState, cState, 
-                                           workQueue >>
+                           /\ Len(queues[self]) > 0
+                           /\ current_msg_c' = [current_msg_c EXCEPT ![self] = Head(queues[self])]
+                           /\ queues' = [queues EXCEPT ![self] = Tail(queues[self])]
+                           /\ pc' = [pc EXCEPT ![self] = "ProcessFinish"]
+                           /\ UNCHANGED << wState, mState, cState, 
+                                           current_msg_, current_msg >>
+
+ProcessFinish(self) == /\ pc[self] = "ProcessFinish"
+                       /\ IF current_msg_c[self].type = "finished"
+                             THEN /\ cState' = [cState EXCEPT ![self] = "idle"]
+                                  /\ pc' = [pc EXCEPT ![self] = "Done"]
+                             ELSE /\ pc' = [pc EXCEPT ![self] = "ReceiveTaskFinish"]
+                                  /\ UNCHANGED cState
+                       /\ UNCHANGED << wState, mState, queues, current_msg_, 
+                                       current_msg_c, current_msg >>
 
 client(self) == SendTaskToManager(self) \/ ReceiveTaskFinish(self)
+                   \/ ProcessFinish(self)
 
-NotifyClientOfCompleteJob(self) == /\ pc[self] = "NotifyClientOfCompleteJob"
-                                   /\ IF msgs.type = "completed"
-                                         THEN /\ \E c \in Clients:
-                                                   queues' = Append(queues[self], ([type |-> "finished", s |-> self, r |-> c]))
-                                         ELSE /\ TRUE
-                                              /\ UNCHANGED queues
-                                   /\ pc' = [pc EXCEPT ![self] = "ReceiveTaskFromClient"]
-                                   /\ UNCHANGED << msgs, wState, mState, 
-                                                   cState, workQueue, msg >>
+ManagerLoop(self) == /\ pc[self] = "ManagerLoop"
+                     /\ pc' = [pc EXCEPT ![self] = "ReceiveManagerTask"]
+                     /\ UNCHANGED << wState, mState, cState, queues, 
+                                     current_msg_, current_msg_c, current_msg >>
 
-ReceiveTaskFromClient(self) == /\ pc[self] = "ReceiveTaskFromClient"
-                               /\ TRUE
-                               /\ pc' = [pc EXCEPT ![self] = "GiveTaskToWorker"]
-                               /\ UNCHANGED << msgs, wState, mState, cState, 
-                                               queues, workQueue, msg >>
+ReceiveManagerTask(self) == /\ pc[self] = "ReceiveManagerTask"
+                            /\ Len(queues[self]) > 0
+                            /\ current_msg' = [current_msg EXCEPT ![self] = Head(queues[self])]
+                            /\ queues' = [queues EXCEPT ![self] = Tail(queues[self])]
+                            /\ pc' = [pc EXCEPT ![self] = "ProcessManagerTask"]
+                            /\ UNCHANGED << wState, mState, cState, 
+                                            current_msg_, current_msg_c >>
 
-GiveTaskToWorker(self) == /\ pc[self] = "GiveTaskToWorker"
-                          /\ TRUE
-                          /\ pc' = [pc EXCEPT ![self] = "Done"]
-                          /\ UNCHANGED << msgs, wState, mState, cState, queues, 
-                                          workQueue, msg >>
+ProcessManagerTask(self) == /\ pc[self] = "ProcessManagerTask"
+                            /\ IF current_msg[self].type = "doWork"
+                                  THEN /\ \E w \in Workers:
+                                            queues' = [queues EXCEPT ![w] = Append(queues[w], ([type |-> "task", s |-> self, r |-> w, client |-> current_msg[self].s]))]
+                                  ELSE /\ IF current_msg[self].type = "completed"
+                                             THEN /\ queues' = [queues EXCEPT ![(current_msg[self].client)] = Append(queues[(current_msg[self].client)], ([type |-> "finished", s |-> self, r |-> current_msg[self].client]))]
+                                             ELSE /\ TRUE
+                                                  /\ UNCHANGED queues
+                            /\ pc' = [pc EXCEPT ![self] = "ManagerLoop"]
+                            /\ UNCHANGED << wState, mState, cState, 
+                                            current_msg_, current_msg_c, 
+                                            current_msg >>
 
-manager(self) == NotifyClientOfCompleteJob(self)
-                    \/ ReceiveTaskFromClient(self)
-                    \/ GiveTaskToWorker(self)
-
-(* Allow infinite stuttering to prevent deadlock on termination. *)
-Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
-               /\ UNCHANGED vars
+manager(self) == ManagerLoop(self) \/ ReceiveManagerTask(self)
+                    \/ ProcessManagerTask(self)
 
 Next == (\E self \in Workers: worker(self))
            \/ (\E self \in Clients: client(self))
            \/ (\E self \in Manager: manager(self))
-           \/ Terminating
 
 Spec == Init /\ [][Next]_vars
 
-Termination == <>(\A self \in ProcSet: pc[self] = "Done")
-
-\* END TRANSLATION 
+\* END TRANSLATION
 
 
 TypeOK == 
         /\ wState \in [Workers -> {"waiting", "working"}]
         /\ mState \in [Manager -> {"ready", "busy", "jobComplete"}]
         /\ cState \in [Clients -> {"assignTask", "idle"}]
-        /\ msgs \subseteq Messages
         
 
 
